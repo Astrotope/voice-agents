@@ -7,7 +7,7 @@ sequenceDiagram
     participant You as Customer
     participant Restaurant as Restaurant Phone
     participant Twilio as Twilio Service
-    participant Webhook as FastAPI Server
+    participant Webhook as Webhook Server
     participant UltravoxAPI as Ultravox API
     participant UltravoxAgent as Ultravox AI Agent
 
@@ -41,6 +41,13 @@ sequenceDiagram
         Twilio->>You: Plays error message
     end
 ```
+
+The Webhook Server could be one of...
+- n8n Workflow webhook server [JSON]
+- Express/Node server (node.js) [Javascript/Typescript]
+- FastAPI/Uvicorn server [Python]
+
+The Webhook Server is middleware to connect the Twilio Stream to the Ultravox Agent
 
 ## Glossary
 
