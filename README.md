@@ -101,6 +101,61 @@ sequenceDiagram
     end
 ```
 
+## Twilio/Ultravox/Cerebrium Process
+
+### Self-hosting Ultravox (STT/LLM) with Cartesia (TTS) on Cerebrium (Pay-as-you-go GPU's)
+
+```mermaid
+sequenceDiagram
+    participant Customer
+    participant Restaurant as Restaurant Phone
+    participant Twilio as Twilio Service
+    participant Cerebrium as Cerebrium Container
+    participant Ultravox as Ultravox Model
+    participant Cartesia as Cartesia TTS
+
+    Customer->>Restaurant: 1. Makes call to restaurant
+    Note over Restaurant: Restaurant has call forwarding enabled
+    Restaurant->>Twilio: 2. Redirects call to Twilio number
+    
+    Twilio->>Cerebrium: 3. POST / (webhook)
+    Cerebrium->>Twilio: 4. Returns TwiML with WebSocket URL
+    Twilio->>Cerebrium: 5. Establishes WebSocket connection (/ws)
+    
+    Note over Cerebrium: Ultravox model pre-loaded in container
+    Cerebrium->>Cerebrium: 6. Initialize PipeCat pipeline
+    Note over Cerebrium: Pipeline: WebSocket → Ultravox → Cartesia → WebSocket
+    
+    rect rgb(220, 255, 220)
+        Note over Customer, Cartesia: Voice conversation with combined STT+LLM
+        Customer->>Twilio: Customer speaks
+        Twilio->>Cerebrium: Audio frames (WebSocket)
+        Cerebrium->>Ultravox: Audio → Text + LLM response
+        Note over Ultravox: Single model handles both STT and LLM
+        Ultravox->>Cerebrium: Generated text response
+        
+        Cerebrium->>Cartesia: Text for TTS conversion
+        Cartesia->>Cerebrium: Audio response
+        Cerebrium->>Twilio: Audio frames (WebSocket)
+        Twilio->>Customer: Plays AI response
+    end
+    
+    Note over Cerebrium,Cartesia: Interruption handling
+    Cerebrium->>Cerebrium: Detect speech interruption
+    Cerebrium->>Cartesia: Cancel current TTS
+    
+    Note over Cerebrium: Auto-scaling based on call volume
+    Cerebrium->>Cerebrium: Scale containers up/down
+    
+    alt Call Ends
+        Customer->>Twilio: Hangs up
+        Twilio->>Cerebrium: WebSocket close
+        Cerebrium->>Cerebrium: Cleanup pipeline
+    end
+```
+
+
+
 ## Glossary
 
 - **PSTN** - Public Switched Telephone Network
