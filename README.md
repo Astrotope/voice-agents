@@ -1,5 +1,47 @@
 # Voice Agents
 
+## Twilio/Ultravox Process
+
+```mermaid
+sequenceDiagram
+    participant You as Customer
+    participant Restaurant as Restaurant Phone
+    participant Twilio as Twilio Service
+    participant Webhook as FastAPI Server
+    participant UltravoxAPI as Ultravox API
+    participant UltravoxAgent as Ultravox AI Agent
+
+    You->>Restaurant: 1. Makes call to restaurant
+    Note over Restaurant: Restaurant has call forwarding enabled
+    Restaurant->>Twilio: 2. Redirects call to Twilio number
+    
+    Twilio->>Webhook: 3. POST /incoming webhook
+    
+    Webhook->>UltravoxAPI: 4. POST /api/calls with config
+    Note over Webhook: Sends systemPrompt, model, voice, temperature
+    UltravoxAPI->>UltravoxAgent: Creates AI agent session
+    UltravoxAPI-->>Webhook: Returns joinUrl and callId
+    
+    Webhook->>Twilio: 5. Returns TwiML with Connect Stream
+    Note over Webhook: TwiML contains Ultravox joinUrl
+    
+    Twilio->>UltravoxAgent: 6. Establishes WebSocket stream to joinUrl
+    Note over Twilio, UltravoxAgent: Bidirectional audio stream established
+    
+    rect rgb(220, 255, 220)
+        Note over You, UltravoxAgent: 7. Ultravox AI Agent takes over
+        You->>UltravoxAgent: Customer speaks
+        UltravoxAgent->>You: AI responds
+        Note over UltravoxAgent: AI processes with fixie-ai/ultravox model
+    end
+    
+    alt Error Handling
+        UltravoxAPI-->>Webhook: API Error
+        Webhook->>Twilio: Error TwiML message
+        Twilio->>You: Plays error message
+    end
+```
+
 ## Glossary
 
 - **PSTN** - Public Switched Telephone Network
@@ -43,9 +85,9 @@ May 7, 2025 - v0.5 70b - [fixie-ai/ultravox-v0_5-llama-3_3-70b](https://huggingf
 Ultravox is a multimodal Speech LLM built around a pretrained Llama3.3-70B-Instruct and whisper-large-v3-turbo backbone.
 
 - No Ultravox API/SDK
-- No TTS system built-in
-- Requires A100 80GB to run (about USD $1.1/hr)
-- Need to agree to Llama license
+- No TTS system built-in. BYO TTS
+- Requires A100 80GB to run (about USD $1.1/hr https://cloud.vast.ai/ or https://vm.massedcompute.com/)
+- Need to agree to Meta Llama license
 
 ---
 
@@ -54,6 +96,7 @@ Ultravox is a multimodal Speech LLM built around a pretrained Llama3.3-70B-Instr
 #### Python/FastAPI/httpx - Basic (Converted with Claude)
 
 [Twilio Python SDK](https://www.twilio.com/docs/libraries/reference/twilio-python/)
+[Ultravox REST API](https://docs.ultravox.ai/api-reference/introduction)
 
 ```python
 import os
