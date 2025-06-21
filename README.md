@@ -49,6 +49,58 @@ The Webhook Server could be one of...
 
 The Webhook Server is middleware to connect the Twilio Stream to the Ultravox Agent
 
+## Twilio/ElevenLabs Process
+
+```mermaid
+sequenceDiagram
+    participant Customer
+    participant Restaurant as Restaurant Phone
+    participant Twilio as Twilio Service
+    participant Webhook as Webhook Server
+    participant ElevenLabs as ElevenLabs API
+    participant Agent as ElevenLabs AI Agent
+
+    Customer->>Restaurant: 1. Makes call to restaurant
+    Note over Restaurant: Restaurant has call forwarding enabled
+    Restaurant->>Twilio: 2. Redirects call to Twilio number
+    
+    Twilio->>Webhook: 3. POST /incoming-call-eleven
+    Webhook->>Twilio: 4. Returns TwiML with Stream URL
+    Twilio->>Webhook: 5. Establishes WebSocket connection (/media-stream)
+    
+    Note over Webhook: Server gets signed URL from ElevenLabs
+    Webhook->>ElevenLabs: 6. GET signed_url (with agent_id)
+    ElevenLabs->>Webhook: 7. Returns signed WebSocket URL
+    Webhook->>Agent: 8. Establishes WebSocket connection
+    
+    Agent->>Webhook: 9. conversation_initiation_metadata
+    
+    rect rgb(220, 255, 220)
+        Note over Customer, Agent: ElevenLabs AI Agent handles conversation
+        Customer->>Twilio: Customer speaks
+        Twilio->>Webhook: media event (base64 audio)
+        Webhook->>Agent: user_audio_chunk (base64 audio)
+        
+        Agent->>Webhook: audio event (base64 response)
+        Webhook->>Twilio: media event (base64 audio)
+        Twilio->>Customer: Plays AI response
+    end
+    
+    Note over Agent,Webhook: Ping/Pong for keepalive
+    Agent->>Webhook: ping event
+    Webhook->>Agent: pong response
+    
+    Note over Agent,Webhook: Handle interruptions
+    Agent->>Webhook: interruption event
+    Webhook->>Twilio: clear event
+    
+    alt Error Handling
+        ElevenLabs-->>Webhook: API Error
+        Webhook->>Twilio: Error handling
+        Twilio->>Customer: Connection terminated
+    end
+```
+
 ## Glossary
 
 - **PSTN** - Public Switched Telephone Network
