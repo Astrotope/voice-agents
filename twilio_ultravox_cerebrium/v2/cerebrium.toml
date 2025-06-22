@@ -1,0 +1,130 @@
+[cerebrium.deployment]
+name = "twilio-ultravox-agent"
+python_version = "3.11"
+docker_base_image_url = "debian:bookworm-slim"
+disable_auth = false
+include = ['./*', 'main.py', 'bot.py', 'cerebrium.toml']
+exclude = ['.*', '__pycache__', '*.pyc', '.env*', 'README.md']
+
+[cerebrium.runtime.custom]
+port = 8765
+entrypoint = ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8765", "--timeout-keep-alive", "300"]
+healthcheck_endpoint = "/health"
+
+[cerebrium.hardware]
+region = "us-east-1"
+provider = "aws"
+compute = "AMPERE_A10"  # GPU required for Ultravox model
+gpu_count = 1
+cpu = 4
+memory = 16.0
+gpu_memory = 24.0  # Explicitly set GPU memory
+
+[cerebrium.scaling]
+min_replicas = 1
+max_replicas = 3
+cooldown = 60  # Increased cooldown for model loading
+replica_concurrency = 1  # Conservative: 1 concurrent call per container initially
+scaling_metric = "concurrency_utilization"
+scaling_target = 70  # Scale before hitting 100% to maintain quality
+scaling_buffer = 1  # Keep 1 extra container warm to avoid model loading delays
+
+[cerebrium.dependencies.pip]
+# Core framework dependencies - using latest stable versions
+torch = ">=2.0.0,<3.0.0"
+"pipecat-ai[silero, cartesia, twilio]" = ">=0.0.50"  # Updated to latest version
+torchaudio = ">=2.0.0,<3.0.0"
+transformers = ">=4.35.0,<5.0.0"
+accelerate = ">=0.20.0"
+
+# Ultravox specific dependencies
+huggingface-hub = ">=0.20.0"
+datasets = ">=2.14.0"
+safetensors = ">=0.4.0"
+
+# Web server dependencies
+fastapi = ">=0.100.0"
+uvicorn = ">=0.23.0"
+python-dotenv = ">=1.0.0"
+
+# Additional dependencies
+twilio = ">=8.0.0"
+loguru = ">=0.7.0"
+requests = ">=2.31.0"
+aiohttp = ">=3.9.0"
+
+# Audio processing
+librosa = ">=0.10.0"
+soundfile = ">=0.12.0"
+
+[cerebrium.dependencies.apt]
+git = "latest"
+ffmpeg = "latest"
+curl = "latest"
+
+[cerebrium.environment]
+# Production environment variables that can be overridden by secrets
+LOG_LEVEL = "INFO"
+ULTRAVOX_MODEL = "fixie-ai/ultravox-v0_4_1-llama-3_1-8b"
+ULTRAVOX_TEMPERATURE = "0.7"
+ULTRAVOX_MAX_TOKENS = "200"
+CARTESIA_MODEL = "sonic-english"
+CARTESIA_VOICE_ID = "79a125e8-cd45-4c13-8a67-188112f4dd22"
+CARTESIA_SPEED = "1.0"
+CALL_TIMEOUT_SECONDS = "1800"
+MAX_CONVERSATION_TURNS = "50"
+RESTAURANT_NAME = "our restaurant"
+RESTAURANT_HOURS = "Monday through Sunday, 11 AM to 10 PM"_base_image_url = "debian:bookworm-slim"
+disable_auth = false
+include = ['./*', 'main.py', 'bot.py', 'cerebrium.toml']
+exclude = ['.*', '__pycache__', '*.pyc']
+
+[cerebrium.runtime.custom]
+port = 8765
+entrypoint = ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8765"]
+healthcheck_endpoint = "/health"
+
+[cerebrium.hardware]
+region = "us-east-1"
+provider = "aws"
+compute = "AMPERE_A10"  # GPU required for Ultravox model
+gpu_count = 1
+cpu = 4
+memory = 16.0
+
+[cerebrium.scaling]
+min_replicas = 1
+max_replicas = 3
+cooldown = 30
+replica_concurrency = 2  # Adjust based on GPU capacity and concurrent call needs
+scaling_metric = "concurrency_utilization"
+scaling_target = 80
+scaling_buffer = 1  # Keep 1 extra container warm to avoid model loading delays
+
+[cerebrium.dependencies.pip]
+# Core framework dependencies
+torch = ">=2.0.0"
+"pipecat-ai[silero, openai, cartesia, twilio]" = "0.0.47"
+aiohttp = ">=3.9.4"
+torchaudio = ">=2.3.0"
+transformers = ">=4.35.0"
+accelerate = "latest"
+
+# Web server dependencies
+fastapi = "latest"
+uvicorn = "latest"
+python-dotenv = "latest"
+
+# Additional dependencies
+twilio = "latest"
+loguru = "latest"
+requests = "latest"
+channels = ">=4.0.0"
+
+# Hugging Face dependencies for Ultravox
+huggingface-hub = "latest"
+datasets = "latest"
+
+[cerebrium.dependencies.apt]
+git = "latest"
+ffmpeg = "latest"
