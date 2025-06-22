@@ -1,5 +1,18 @@
 # Voice Agents
 
+## General Notes
+
+- The goal of this repository is to try out the component technologies of voice agents and see how they fit together
+  - Twilio (required)
+  - Ultravox or ElevenLabs 
+  - n8n/JSON, versus Express.js/Javascript, versus FastAPI/Python
+  - Ultravox.ai versus Ultravox self-hosted
+ 
+- Conclusions
+  - Use Twilio with either ElevenLabs or Ultravox.ai (non self-hosted Ultravox)
+  - Probably prefer Express.js/Typescript over n8n/JSON or FastAPI/Python as the webhook server
+  - This would be easier to integrate into a SASS application using the [Open SASS](https://docs.opensaas.sh/) template
+
 ## The Twilio/Ultravox Setup
 
 The Webhook Server could be one of...
