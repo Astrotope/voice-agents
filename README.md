@@ -13,7 +13,16 @@
   - Probably prefer Express.js/Typescript over n8n/JSON or FastAPI/Python as the webhook server
   - This would be easier to integrate into a SASS application using the [Open SASS](https://docs.opensaas.sh/) template
  
+### Standard Voice Agent Architecture
+
+![Standard Voice Agent Architecture](https://blog.ovhcloud.com/wp-content/uploads/2024/07/audio-virtual-assistant-app-blog-post-puzzles.png)
+
+Standard: Audio-IN ->> ASR/STT ->> LLM ->> TTS ->> Audio OUT
+Ultravox: Audio-IN ->> Ultravox ->> TTS ->> Audio OUT
+ 
 ### Ultravox Architecture
+
+Ultravox is a multimodal LLM that understands text and human speech without separate ASR. It converts audio to LLM’s high-dimensional space, responding faster than systems with separate ASR and LLM components.
 
 [![architecture diagram](https://raw.githubusercontent.com/fixie-ai/ultravox/main/docs/assets/Ultravox%20Model%20Architecture.svg)](https://docs.google.com/presentation/d/1ey81xuuMzrJaBwztb_Rq24Cit37GQokD2aAes_KkGVI/edit)
 
