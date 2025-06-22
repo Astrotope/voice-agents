@@ -433,12 +433,6 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=3000)
 ```
 
-#### FastAPI Server (httpx) - Python Advanced App
-
-```python
-
-```
-
 #### Express Server - Typescript/Javascript Basic App
 
 [Ultravox Twilio Incoming Call Quickstart](https://github.com/fixie-ai/ultradox/tree/main/examples/twilio-incoming-quickstart-js)
