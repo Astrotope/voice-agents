@@ -1,5 +1,30 @@
 # Voice Agents
 
+## The Twilio/Ultravox Setup
+
+The Webhook Server could be one of...
+
+- n8n Workflow webhook server [JSON]
+- Express/Node server (node.js) [Javascript/Typescript]
+- FastAPI/Uvicorn server [Python]
+
+The Webhook Server is middleware that connects the Twilio Stream to the Ultravox Agent.
+
+Once connected the Ultravox Agent takes over.
+
+I've worked through 6 possible set-ups. 
+I'm still waiting for regulatory bundle approval with Twilio, before I can test the code.
+
+- Twilio/Ultravox Process (n8n Webhook Server)
+- Twilio/Ultravox Process (Express.js Webhook Server)
+- Twilio/Ultravox Process (FastAPI Webhook Server)
+- Twilio/ElevenLabs Process (Express.js Webhook Server)
+- Twilio/Ultravox/Cartesia/Cerebrium Process (Python Webhook Server)
+  - Pay-as-you-go serverless GPU service
+    - Can run GPU's during business or busy hours
+    - Start-up is estimated at 40 seconds
+    - This would need some careful thought about when to spin-up GPU's
+
 ## Twilio/Ultravox Process (n8n Webhook Server)
 
 See code ... [Twiliod Ultravox n8n v1](twilio_ultravox/n8n)
@@ -109,13 +134,6 @@ sequenceDiagram
     end
 ```
 
-The Webhook Server could be one of...
-- n8n Workflow webhook server [JSON]
-- Express/Node server (node.js) [Javascript/Typescript]
-- FastAPI/Uvicorn server [Python]
-
-The Webhook Server is middleware to connect the Twilio Stream to the Ultravox Agent
-
 ## Twilio/ElevenLabs Process
 
 See code ... [Twiliod ElevenLabs Javascript](twilio_elevenlabs/javascript)
@@ -172,7 +190,7 @@ sequenceDiagram
     end
 ```
 
-## Twilio/Ultravox/Cerebrium Process
+## Twilio/Ultravox/Cartesia/Cerebrium Process
 
 ### Self-hosting Ultravox (STT/LLM) with Cartesia (TTS) on Cerebrium (Pay-as-you-go GPU's)
 
