@@ -13,6 +13,10 @@
   - Probably prefer Express.js/Typescript over n8n/JSON or FastAPI/Python as the webhook server
   - This would be easier to integrate into a SASS application using the [Open SASS](https://docs.opensaas.sh/) template
  
+### Advantages of Voice Agents over Standard IVR
+
+![Advantages of Voice Agents over Standard IVR](https://www.astera.com/wp-content/uploads/2025/04/How-AI-voice-Compare-scaled.jpg)
+ 
 ### Standard Voice Agent Architecture
 
 ![Standard Voice Agent Architecture](https://blog.ovhcloud.com/wp-content/uploads/2024/07/audio-virtual-assistant-app-blog-post-puzzles.png)
