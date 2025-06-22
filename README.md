@@ -11,7 +11,7 @@
 - Conclusions
   - Use Twilio with either ElevenLabs or Ultravox.ai (non self-hosted Ultravox)
   - Probably prefer Express.js/Typescript over n8n/JSON or FastAPI/Python as the webhook server
-  - This would be easier to integrate into a SASS application using the [Open SASS](https://docs.opensaas.sh/) template
+  - Express.js/Typescript would be easier to integrate into a SASS application using the [Open SASS](https://docs.opensaas.sh/) template
  
 ### Advantages of Voice Agents over Standard IVR
 
