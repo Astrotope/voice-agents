@@ -1,5 +1,5 @@
 {
-  "name": "twilio_ultravox",
+  "name": "Twilio Ultravox Voice Agent",
   "nodes": [
     {
       "parameters": {
@@ -18,16 +18,16 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"systemPrompt\": \"You are a concise AI phone assistant. On new calls, say: \\\"At your service, (YOUR NAME). How may I assist you today?\\\" Respond like a human would, as authentic as possible. GUIDELINES: Keep responses under 3 sentences when possible. If you don't know something, say so briefly. Never make up information. Call and execute tools after information is received without delays. When retrieving news, explain it to the user in a very fun, engaging way. Todays date is {{ $now }}\",\n  \"model\": \"fixie-ai/ultravox-70B\",\n  \"voice\": \"Steve-English-Australian\",\n  \"temperature\": 0.1,\n  \"firstSpeaker\": \"FIRST_SPEAKER_AGENT\",\n  \"medium\": {\"twilio\": {}}\n}",
+        "jsonBody": "={\n  \"systemPrompt\": \"Your name is Steve. You are receiving a phone call. Ask them their name and see how they are doing. If they say goodbye, or the call naturally wraps up, use the 'hangUp' tool to end the call..\",\n  \"selectedTools\": [\n    { \"toolName\": \"hangUp\" }\n  ],\n  \"model\": \"fixie-ai/ultravox\",\n  \"voice\": \"Mark\",\n  \"temperature\": 0.3,\n  \"firstSpeaker\": \"FIRST_SPEAKER_AGENT\",\n  \"medium\": {\"twilio\": {}}\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        220,
-        0
+        440,
+        -180
       ],
-      "id": "05f3f78b-11eb-4120-ba1d-bd6f657c967c",
+      "id": "b9bcb473-6359-40f7-9046-aaba6cd9f274",
       "name": "Connect to Ultravox",
       "credentials": {
         "httpHeaderAuth": {
@@ -53,24 +53,25 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        440,
-        0
+        660,
+        -180
       ],
-      "id": "4d61f656-55f9-47c1-98f4-59f74a26aaf3",
+      "id": "bd9f2d47-f52c-4406-aac4-b803c23b5e6b",
       "name": "Join URL"
     },
     {
       "parameters": {
         "path": "9a7d5abd-51fa-47dd-aacb-6e0b290e883c",
+        "responseMode": "responseNode",
         "options": {}
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        0,
-        0
+        220,
+        -180
       ],
-      "id": "7dc3dc36-5e99-474b-be69-fe38a3f9ddc2",
+      "id": "f2efe02e-85a4-41d7-b8e0-2a9e1a682f65",
       "name": "Twilio Webhook",
       "webhookId": "9a7d5abd-51fa-47dd-aacb-6e0b290e883c"
     },
@@ -92,10 +93,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.2,
       "position": [
-        660,
-        0
+        880,
+        -180
       ],
-      "id": "4dc2b734-9a7d-482b-993a-c615f816ee5b",
+      "id": "ec08866b-f5ad-40b2-98ae-e2375321bce7",
       "name": "Respond to Twilio Webhook"
     }
   ],
@@ -139,7 +140,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "9ae89fd8-43e9-4572-8ef0-af87898b0b2b",
+  "versionId": "c8ea8dc1-2835-4d32-a003-22f655ab6643",
   "meta": {
     "instanceId": "d7c035f968edb2d1a1cb4d63b3d6598a904af94c69caab89c400e2a8e131f4b2"
   },
