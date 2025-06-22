@@ -4,7 +4,7 @@
 
 The Webhook Server could be one of...
 
-- n8n Workflow webhook server [JSON]
+- n8n Workflow webhook server [JSON] (see notes at end on scaling n8n)
 - Express/Node server (node.js) [Javascript/Typescript]
 - FastAPI/Uvicorn server [Python]
 
