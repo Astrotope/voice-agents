@@ -18,6 +18,7 @@
 ![Standard Voice Agent Architecture](https://blog.ovhcloud.com/wp-content/uploads/2024/07/audio-virtual-assistant-app-blog-post-puzzles.png)
 
 Standard: Audio-IN ->> ASR/STT ->> LLM ->> TTS ->> Audio OUT
+
 Ultravox: Audio-IN ->> Ultravox ->> TTS ->> Audio OUT
  
 ### Ultravox Architecture
