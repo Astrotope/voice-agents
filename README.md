@@ -24,9 +24,9 @@
 
 The Webhook Server could be one of...
 
-- n8n Workflow webhook server [JSON] (see notes at end on scaling n8n)
-- Express/Node server (node.js) [Javascript/Typescript]
-- FastAPI/Uvicorn server [Python]
+- n8n Workflow webhook server [JSON] (see notes at end on [scaling n8n](https://github.com/Astrotope/voice-agents/blob/main/README.md#-n8n))
+- Express/Node server (node.js) [Javascript/Typescript](twilio_ultravox/javascript)
+- FastAPI/Uvicorn server [Python](twilio_ultravox/python)
 
 The Webhook Server is middleware that connects the Twilio Stream to the Ultravox Agent.
 
@@ -35,11 +35,11 @@ Once connected the Ultravox Agent takes over.
 I've worked through 6 possible set-ups. 
 I'm still waiting for regulatory bundle approval with Twilio, before I can test the code.
 
-- Twilio/Ultravox Process (n8n Webhook Server)
-- Twilio/Ultravox Process (Express.js Webhook Server)
-- Twilio/Ultravox Process (FastAPI Webhook Server)
-- Twilio/ElevenLabs Process (Express.js Webhook Server)
-- Twilio/Ultravox/Cartesia/Cerebrium Process (Python Webhook Server)
+- Twilio/Ultravox Process (n8n Webhook Server) [Link](https://github.com/Astrotope/voice-agents/blob/main/README.md#twilioultravox-process-n8n-webhook-server), [Code](twilio_ultravox/n8n)
+- Twilio/Ultravox Process (Express.js Webhook Server) [Link](https://github.com/Astrotope/voice-agents/blob/main/README.md#twilioultravox-process-expressjs-or-fastapi-webhook-server), [Code](twilio_ultravox/javascript)
+- Twilio/Ultravox Process (FastAPI Webhook Server) [Link](https://github.com/Astrotope/voice-agents/blob/main/README.md#twilioultravox-process-expressjs-or-fastapi-webhook-server), [Code](twilio_ultravox/python)
+- Twilio/ElevenLabs Process (Express.js Webhook Server) [Link](https://github.com/Astrotope/voice-agents/blob/main/README.md#twilioelevenlabs-process), [Code](twilio_elevenlabs/javascript)
+- Twilio/Ultravox/Cartesia/Cerebrium Process (Python Webhook Server) [Link](https://github.com/Astrotope/voice-agents/blob/main/README.md#twilioultravoxcartesiacerebrium-process), [Code](twilio_ultravox_cerebrium/v1)
   - This is a future option for self-hosting Ultravox
     - It would require a moderate customer base to make it viable
   - Pay-as-you-go serverless GPU service
