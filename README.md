@@ -34,7 +34,7 @@ Ultravox is a multimodal LLM that understands text and human speech without sepa
 
 The Webhook Server could be one of...
 
-- n8n Workflow webhook server [JSON] (see notes at end on [scaling n8n](https://github.com/Astrotope/voice-agents/blob/main/README.md#-n8n))
+- n8n Workflow webhook server [JSON](twilio_ultravox/n8n) (see notes at end on [scaling n8n](https://github.com/Astrotope/voice-agents/blob/main/README.md#-n8n))
 - Express/Node server (node.js) [Javascript/Typescript](twilio_ultravox/javascript)
 - FastAPI/Uvicorn server [Python](twilio_ultravox/python)
 
