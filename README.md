@@ -20,6 +20,8 @@ I'm still waiting for regulatory bundle approval with Twilio, before I can test 
 - Twilio/Ultravox Process (FastAPI Webhook Server)
 - Twilio/ElevenLabs Process (Express.js Webhook Server)
 - Twilio/Ultravox/Cartesia/Cerebrium Process (Python Webhook Server)
+  - This is a future option for self-hosting Ultravox
+    - It would require a moderate customer base to make it viable
   - Pay-as-you-go serverless GPU service
     - Can run GPU's during business or busy hours
     - Start-up is estimated at 40 seconds
