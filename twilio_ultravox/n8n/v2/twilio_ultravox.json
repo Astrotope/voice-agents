@@ -1,9 +1,10 @@
 {
-  "name": "My workflow 4",
+  "name": "Twilio/Ultravox Agent",
   "nodes": [
     {
       "parameters": {
         "path": "0c965d36-fff2-482e-8b74-712b440168ce",
+        "responseMode": "responseNode",
         "options": {}
       },
       "type": "n8n-nodes-base.webhook",
@@ -18,7 +19,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Log incoming call details\nconsole.log('Incoming call received');\nconsole.log('From:', $input.item(0).json.From);\nconsole.log('To:', $input.item(0).json.To);\nconsole.log('CallSid:', $input.item(0).json.CallSid);\n\nreturn $input.all();"
+        "jsCode": "// Log incoming call details\nconsole.log('Incoming call received');\nconsole.log('From:', $input.first().json.query.From);\nconsole.log('To:', $input.first().json.query.To);\nconsole.log('CallSid:', $input.first().json.query.CallSid);\n\nreturn $input.all();"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -50,7 +51,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"systemPrompt\": \"Your name is Steve. You are receiving a phone call. Ask them their name and see how they are doing.\",\n  \"model\": \"fixie-ai/ultravox\",\n  \"voice\": \"Mark\",\n  \"temperature\": 0.3,\n  \"firstSpeaker\": \"FIRST_SPEAKER_AGENT\",\n  \"medium\": {\"twilio\": {}}\n}",
+        "jsonBody": "={\n  \"systemPrompt\": \"Your name is Steve. You are receiving a phone call. Ask them their name and see how they are doing. If they say goodbye, or the call naturally wraps up, use the 'hangUp' tool to end the call..\",\n  \"selectedTools\": [\n    { \"toolName\": \"hangUp\" }\n  ],\n  \"model\": \"fixie-ai/ultravox\",\n  \"voice\": \"Mark\",\n  \"temperature\": 0.3,\n  \"firstSpeaker\": \"FIRST_SPEAKER_AGENT\",\n  \"medium\": {\"twilio\": {}}\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -99,7 +100,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Log successful Ultravox call creation\nconsole.log('Ultravox call created successfully');\nconsole.log('Join URL:', $input.item(0).json.joinUrl);\nconsole.log('Call ID:', $input.item(0).json.callId);\n\nreturn $input.all();"
+        "jsCode": "// Log successful Ultravox call creation\nconsole.log('Ultravox call created successfully');\nconsole.log('Join URL:', $input.first().json.joinUrl);\nconsole.log('Call ID:', $input.first().json.callId);\n\nreturn $input.all();"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -136,7 +137,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Log error details\nconsole.error('Error handling incoming call:', $input.item(0).json.error);\nif ($input.item(0).json.httpCode) {\n  console.error('HTTP Status:', $input.item(0).json.httpCode);\n}\nif ($input.item(0).json.message) {\n  console.error('Error message:', $input.item(0).json.message);\n}\n\nreturn $input.all();"
+        "jsCode": "// Log error details\nconsole.log('Error count for incoming call:', $input.first().json.errorCount);\n\nreturn $input.all();"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -246,11 +247,11 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "b430f84b-a15f-463e-a23c-fb9bf45efba5",
+  "versionId": "5ac68e2c-d259-4942-bc03-3997ca78ff2c",
   "meta": {
     "instanceId": "d7c035f968edb2d1a1cb4d63b3d6598a904af94c69caab89c400e2a8e131f4b2"
   },
