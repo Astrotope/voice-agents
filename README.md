@@ -323,15 +323,15 @@ sequenceDiagram
 - Clean Local Number - $3.15 / mo
 - Receive Calls - Local - $0.0100 / min +$3.15 / mo
 
-[Python SDK](https://www.twilio.com/docs/voice/quickstart/python)
+[Python SDK Quickstart](https://www.twilio.com/docs/voice/quickstart/python)
+
+[Python SDK](https://github.com/twilio/twilio-python)
 
 [Respond to Incoming Calls](https://www.twilio.com/docs/voice/quickstart/python#respond-to-incoming-calls-with-twilio)
 
 [Configure Webhook URL](https://www.twilio.com/docs/voice/quickstart/python#respond-to-incoming-calls-with-twilio)
 
 [Secure Connections to Twilio](https://www.twilio.com/docs/usage/securityhttps://www.twilio.com/docs/usage/security)
-
-[Python SDK](https://github.com/twilio/twilio-python)
 
 Reduce NZ call handling latency by moving inbound processing region to AU1 from US1
 
