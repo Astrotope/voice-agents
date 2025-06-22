@@ -1,6 +1,61 @@
 # Voice Agents
 
-## Twilio/Ultravox Process
+Twilio/Ultravox Process (n8n Webhook Server)
+
+```mermaid
+sequenceDiagram
+    participant You as Customer
+    participant Restaurant as Restaurant Phone
+    participant Twilio as Twilio Service
+    participant n8nWebhook as n8n Webhook
+    participant LogNode as Log Incoming Call
+    participant UltravoxAPI as Ultravox API
+    participant ExtractNode as Extract Response
+    participant LogSuccess as Log Success
+    participant UltravoxAgent as Ultravox AI Agent
+    participant ErrorLog as Log Error
+    participant ErrorResponse as Error Response
+    
+    You->>Restaurant: 1. Makes call to restaurant
+    Note over Restaurant: Restaurant has call forwarding enabled
+    Restaurant->>Twilio: 2. Redirects call to Twilio number
+    
+    Twilio->>n8nWebhook: 3. POST /webhook with call data
+    Note over n8nWebhook: Receives From, To, CallSid params
+    
+    n8nWebhook->>LogNode: 4. Pass call data
+    Note over LogNode: Logs: From, To, CallSid
+    
+    LogNode->>UltravoxAPI: 5. POST /api/calls with config
+    Note over LogNode: Sends systemPrompt, model: fixie-ai/ultravox,<br/>voice: Mark, temperature: 0.3
+    
+    alt Success Path
+        UltravoxAPI->>ExtractNode: Returns joinUrl and callId
+        ExtractNode->>LogSuccess: Pass response data
+        Note over LogSuccess: Logs: joinUrl, callId
+        LogSuccess->>Twilio: 6. Returns TwiML with Connect Stream
+        Note over LogSuccess: XML: <Connect><Stream url="joinUrl" name="ultravox"/></Connect>
+        
+        Twilio->>UltravoxAgent: 7. Establishes WebSocket stream to joinUrl
+        Note over Twilio, UltravoxAgent: Bidirectional audio stream established
+        
+        rect rgb(220, 255, 220)
+            Note over You, UltravoxAgent: 8. Ultravox AI Agent takes over
+            You->>UltravoxAgent: Customer speaks
+            UltravoxAgent->>You: AI responds (Steve: "Ask name, see how doing")
+            Note over UltravoxAgent: AI processes with fixie-ai/ultravox model
+        end
+    else Error Path
+        UltravoxAPI-->>ErrorLog: API Error
+        Note over ErrorLog: Logs: httpCode, error message, full error details
+        ErrorLog->>ErrorResponse: Handle error
+        ErrorResponse->>Twilio: Error TwiML message
+        Note over ErrorResponse: XML: <Say>Sorry, there was an error connecting your call.</Say>
+        Twilio->>You: Plays error message
+    end
+```
+
+## Twilio/Ultravox Process (Express.js or FastAPI Webhook Server)
 
 ```mermaid
 sequenceDiagram
