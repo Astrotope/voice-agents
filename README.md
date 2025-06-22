@@ -19,13 +19,13 @@
  
 ### Standard Voice Agent Architecture
 
-![Standard Voice Agent Architecture](https://blog.ovhcloud.com/wp-content/uploads/2024/07/audio-virtual-assistant-app-blog-post-puzzles.png)
-
 Standard: Audio-IN ->> ASR/STT ->> LLM ->> TTS ->> Audio OUT
 
-Ultravox: Audio-IN ->> Ultravox ->> TTS ->> Audio OUT
+![Standard Voice Agent Architecture](https://blog.ovhcloud.com/wp-content/uploads/2024/07/audio-virtual-assistant-app-blog-post-puzzles.png)
  
 ### Ultravox Architecture
+
+Ultravox: Audio-IN ->> Ultravox ->> TTS ->> Audio OUT
 
 Ultravox is a multimodal LLM that understands text and human speech without separate ASR. It converts audio to LLM’s high-dimensional space, responding faster than systems with separate ASR and LLM components.
 
