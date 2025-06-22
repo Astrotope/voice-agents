@@ -1,0 +1,148 @@
+{
+  "name": "twilio_ultravox",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ultravox.ai/api/calls",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"systemPrompt\": \"You are a concise AI phone assistant. On new calls, say: \\\"At your service, (YOUR NAME). How may I assist you today?\\\" Respond like a human would, as authentic as possible. GUIDELINES: Keep responses under 3 sentences when possible. If you don't know something, say so briefly. Never make up information. Call and execute tools after information is received without delays. When retrieving news, explain it to the user in a very fun, engaging way. Todays date is {{ $now }}\",\n  \"model\": \"fixie-ai/ultravox-70B\",\n  \"voice\": \"Steve-English-Australian\",\n  \"temperature\": 0.1,\n  \"firstSpeaker\": \"FIRST_SPEAKER_AGENT\",\n  \"medium\": {\"twilio\": {}}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "05f3f78b-11eb-4120-ba1d-bd6f657c967c",
+      "name": "Connect to Ultravox",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "WtA6axMQNivl5an8",
+          "name": "Ultravox Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1dc6aa3-3385-468a-96fc-a603dbe45c46",
+              "name": "joinUrl",
+              "value": "={{ $json.joinUrl }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        0
+      ],
+      "id": "4d61f656-55f9-47c1-98f4-59f74a26aaf3",
+      "name": "Join URL"
+    },
+    {
+      "parameters": {
+        "path": "9a7d5abd-51fa-47dd-aacb-6e0b290e883c",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7dc3dc36-5e99-474b-be69-fe38a3f9ddc2",
+      "name": "Twilio Webhook",
+      "webhookId": "9a7d5abd-51fa-47dd-aacb-6e0b290e883c"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Response>\n  <Connect>\n    <Stream url=\"{{ $json.joinUrl }}\"/>\n  </Connect>\n</Response>",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/xml"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "4dc2b734-9a7d-482b-993a-c615f816ee5b",
+      "name": "Respond to Twilio Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Connect to Ultravox": {
+      "main": [
+        [
+          {
+            "node": "Join URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Join URL": {
+      "main": [
+        [
+          {
+            "node": "Respond to Twilio Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Twilio Webhook": {
+      "main": [
+        [
+          {
+            "node": "Connect to Ultravox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "9ae89fd8-43e9-4572-8ef0-af87898b0b2b",
+  "meta": {
+    "instanceId": "d7c035f968edb2d1a1cb4d63b3d6598a904af94c69caab89c400e2a8e131f4b2"
+  },
+  "id": "J1tbqcLiGpf96nwT",
+  "tags": []
+}
