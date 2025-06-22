@@ -12,6 +12,13 @@
   - Use Twilio with either ElevenLabs or Ultravox.ai (non self-hosted Ultravox)
   - Probably prefer Express.js/Typescript over n8n/JSON or FastAPI/Python as the webhook server
   - This would be easier to integrate into a SASS application using the [Open SASS](https://docs.opensaas.sh/) template
+ 
+### Ultravox Architecture
+
+[![architecture diagram](https://raw.githubusercontent.com/fixie-ai/ultravox/main/docs/assets/Ultravox%20Model%20Architecture.svg)](https://docs.google.com/presentation/d/1ey81xuuMzrJaBwztb_Rq24Cit37GQokD2aAes_KkGVI/edit)
+
+[Ultravox Architecture](https://github.com/fixie-ai/ultravox/blob/main/README.md)
+
 
 ## The Twilio/Ultravox Setup
 
