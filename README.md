@@ -34,7 +34,7 @@ Ultravox is a multimodal LLM that understands text and human speech without sepa
 [Ultravox Architecture](https://github.com/fixie-ai/ultravox/blob/main/README.md)
 
 
-## The Twilio/Ultravox Setup
+## Twilio/Ultravox.ai Setup
 
 The Webhook Server could be one of...
 
@@ -42,17 +42,20 @@ The Webhook Server could be one of...
 - Express/Node server (node.js) [Javascript/Typescript](twilio_ultravox/javascript)
 - FastAPI/Uvicorn server [Python](twilio_ultravox/python)
 
-The Webhook Server is middleware that connects the Twilio Stream to the Ultravox Agent.
+The Webhook Server is middleware that connects the Twilio Stream to the Ultravox Agent. Once connected the Ultravox Agent takes over.
 
-Once connected the Ultravox Agent takes over.
-
-I've worked through 6 possible set-ups. 
-I'm still waiting for regulatory bundle approval with Twilio, before I can test the code.
+[Note: I'm still waiting for regulatory bundle approval with Twilio, before I can test this code.]
 
 - Twilio/Ultravox Process (n8n Webhook Server) [Sequence Diagram](https://github.com/Astrotope/voice-agents/blob/main/README.md#twilioultravox-process-n8n-webhook-server), [Code](twilio_ultravox/n8n)
 - Twilio/Ultravox Process (Express.js Webhook Server) [Sequence Diagram](https://github.com/Astrotope/voice-agents/blob/main/README.md#twilioultravox-process-expressjs-or-fastapi-webhook-server), [Code](twilio_ultravox/javascript)
 - Twilio/Ultravox Process (FastAPI Webhook Server) [Sequence Diagram](https://github.com/Astrotope/voice-agents/blob/main/README.md#twilioultravox-process-expressjs-or-fastapi-webhook-server), [Code](twilio_ultravox/python)
+
+## Twilio/ElevenLabs Setup
+
 - Twilio/ElevenLabs Process (Express.js Webhook Server) [Sequence Diagram](https://github.com/Astrotope/voice-agents/blob/main/README.md#twilioelevenlabs-process), [Code](twilio_elevenlabs/javascript)
+
+## Twilio/Ultravox/Cartesia/Cerebrium Self-hosted Setup
+
 - Twilio/Ultravox/Cartesia/Cerebrium Process (Python Webhook Server) [Sequence Diagram](https://github.com/Astrotope/voice-agents/blob/main/README.md#twilioultravoxcartesiacerebrium-process), [Code](twilio_ultravox_cerebrium/v1)
   - This is a future option for self-hosting Ultravox
     - It would require a moderate customer base to make it viable
