@@ -36,8 +36,8 @@ async function createCorpus(): Promise<string> {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
-    },
+      'X-API-Key': API_KEY!
+    } as HeadersInit,
     body: JSON.stringify({
       name: 'Bella Vista Restaurant Menu',
       description: 'Complete menu, special requirements, and restaurant information for Bella Vista Italian Restaurant'
@@ -49,7 +49,7 @@ async function createCorpus(): Promise<string> {
     throw new Error(`Failed to create corpus: ${error}`);
   }
 
-  const corpus: CorpusResponse = await response.json();
+  const corpus = await response.json() as CorpusResponse;
   console.log(`✅ Created corpus: ${corpus.corpusId}`);
   return corpus.corpusId;
 }
@@ -61,8 +61,8 @@ async function requestUploadUrl(corpusId: string): Promise<UploadResponse> {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
-    },
+      'X-API-Key': API_KEY!
+    } as HeadersInit,
     body: JSON.stringify({
       mimeType: 'text/markdown'
     })
@@ -73,7 +73,7 @@ async function requestUploadUrl(corpusId: string): Promise<UploadResponse> {
     throw new Error(`Failed to request upload URL: ${error}`);
   }
 
-  const uploadData: UploadResponse = await response.json();
+  const uploadData = await response.json() as UploadResponse;
   console.log(`✅ Got upload URL for document: ${uploadData.documentId}`);
   return uploadData;
 }
@@ -107,8 +107,8 @@ async function createSource(corpusId: string, documentId: string): Promise<void>
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
-    },
+      'X-API-Key': API_KEY!
+    } as HeadersInit,
     body: JSON.stringify({
       upload: {
         documentId: documentId
@@ -121,7 +121,7 @@ async function createSource(corpusId: string, documentId: string): Promise<void>
     throw new Error(`Failed to create source: ${error}`);
   }
 
-  const source = await response.json();
+  const source = await response.json() as any;
   console.log(`✅ Created source: ${source.sourceId}`);
 }
 
@@ -199,8 +199,8 @@ async function addSpecialRequirementsContent(corpusId: string): Promise<void> {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
-    },
+      'X-API-Key': API_KEY!
+    } as HeadersInit,
     body: JSON.stringify({
       mimeType: 'text/markdown'
     })
@@ -210,14 +210,14 @@ async function addSpecialRequirementsContent(corpusId: string): Promise<void> {
     throw new Error('Failed to request upload for special requirements');
   }
 
-  const { presignedUrl, documentId } = await uploadResponse.json();
+  const { presignedUrl, documentId } = await uploadResponse.json() as UploadResponse;
 
   // Upload the content
   await fetch(presignedUrl, {
     method: 'PUT',
     headers: {
       'Content-Type': 'text/markdown'
-    },
+    } as HeadersInit,
     body: specialRequirements
   });
 
@@ -226,8 +226,8 @@ async function addSpecialRequirementsContent(corpusId: string): Promise<void> {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
-    },
+      'X-API-Key': API_KEY!
+    } as HeadersInit,
     body: JSON.stringify({
       upload: { documentId }
     })
@@ -243,8 +243,8 @@ async function testCorpusQuery(corpusId: string): Promise<void> {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
-    },
+      'X-API-Key': API_KEY!
+    } as HeadersInit,
     body: JSON.stringify({
       query: 'What vegetarian options do you have?'
     })
@@ -255,7 +255,7 @@ async function testCorpusQuery(corpusId: string): Promise<void> {
     return;
   }
 
-  const result = await response.json();
+  const result = await response.json() as any;
   console.log('✅ Corpus query test successful');
   console.log('Sample response:', result.response?.slice(0, 100) + '...');
 }
@@ -296,7 +296,7 @@ async function main() {
    }`);
     console.log('3. Start your server with: npm run dev');
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Error setting up corpus:', error.message);
     process.exit(1);
   }
