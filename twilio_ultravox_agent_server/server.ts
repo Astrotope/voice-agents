@@ -40,7 +40,41 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 if (DEBUG_REQUESTS) {
   app.use((req, res, next) => {
     const timestamp = new Date().toISOString();
-    console.log(`🌐 [${timestamp}] ${req.method} ${req.url}`);
+    console.log(`🚨 Error webhook: http://localhost:${port}/webhook/twilio-errors`);
+  console.log(`🏥 Health check: http://localhost:${port}/health`);
+  console.log(`📊 Active calls: http://localhost:${port}/active-calls (requires API key)`);
+  console.log(`📈 Metrics: http://localhost:${port}/metrics (requires API key)`);
+  console.log(`⚙️  Configuration: http://localhost:${port}/config (requires API key)`);
+  console.log(`📝 Bookings: http://localhost:${port}/bookings (requires API key)`);
+  console.log(`🔍 Check booking: POST http://localhost:${port}/tools/check-booking`);
+  console.log(`🧪 Debug booking: POST http://localhost:${port}/debug/create-booking (requires API key)`);
+  console.log(`👤 Agent: ${AGENT_NAME}`);
+  console.log(`🗣️ Ultravox Voice: ${ULTRAVOX_VOICE}`);
+  console.log(`📞 Twilio Voice: ${TWILIO_VOICE}`);
+  console.log(`🔢 Max Concurrent Calls: ${MAX_CONCURRENT_CALLS}`);
+  console.log(`🔐 Admin endpoints require X-API-Key header`);
+  console.log(`🧪 Debug mode - Bookings: ${DEBUG_BOOKINGS}, Tools: ${DEBUG_TOOLS}, Requests: ${DEBUG_REQUESTS}`);
+  console.log(`📊 Initial bookings array length: ${bookings.length}`);
+  console.log(`🎯 Phonetic booking codes enabled - example: ABC = Alpha Bravo Charlie`);
+
+  if (!process.env.ULTRAVOX_API_KEY) {
+    console.warn('⚠️  ULTRAVOX_API_KEY environment variable not set!');
+  }
+
+  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+    console.warn('⚠️  Twilio credentials not set!');
+  }
+  
+  if (!process.env.ULTRAVOX_CORPUS_ID) {
+    console.warn('⚠️  ULTRAVOX_CORPUS_ID environment variable not set!');
+  }
+
+  if (ADMIN_API_KEY === 'your-secure-admin-key') {
+    console.warn('⚠️  Please set ADMIN_API_KEY environment variable for production!');
+  }
+});
+
+export default app;(`🌐 [${timestamp}] ${req.method} ${req.url}`);
     
     // Log headers for tool endpoints
     if (req.url.startsWith('/tools/')) {
@@ -444,39 +478,7 @@ const updateMetrics = async () => {
     const processMemMB = Math.round(memUsage.rss / 1024 / 1024);
     const systemMemPercent = Math.round((memUsage.rss / totalSystemMem) * 100);
     
-    console.log(`📊 Active calls: http://localhost:${port}/active-calls (requires API key)`);
-  console.log(`📈 Metrics: http://localhost:${port}/metrics (requires API key)`);
-  console.log(`⚙️  Configuration: http://localhost:${port}/config (requires API key)`);
-  console.log(`📝 Bookings: http://localhost:${port}/bookings (requires API key)`);
-  console.log(`🔍 Check booking: POST http://localhost:${port}/tools/check-booking`);
-  console.log(`🧪 Debug booking: POST http://localhost:${port}/debug/create-booking (requires API key)`);
-  console.log(`👤 Agent: ${AGENT_NAME}`);
-  console.log(`🗣️ Ultravox Voice: ${ULTRAVOX_VOICE}`);
-  console.log(`📞 Twilio Voice: ${TWILIO_VOICE}`);
-  console.log(`🔢 Max Concurrent Calls: ${MAX_CONCURRENT_CALLS}`);
-  console.log(`🔐 Admin endpoints require X-API-Key header`);
-  console.log(`🧪 Debug mode - Bookings: ${DEBUG_BOOKINGS}, Tools: ${DEBUG_TOOLS}, Requests: ${DEBUG_REQUESTS}`);
-  console.log(`📊 Initial bookings array length: ${bookings.length}`);
-  console.log(`🎯 Phonetic booking codes enabled - example: ABC = Alpha Bravo Charlie`);
-
-  if (!process.env.ULTRAVOX_API_KEY) {
-    console.warn('⚠️  ULTRAVOX_API_KEY environment variable not set!');
-  }
-
-  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
-    console.warn('⚠️  Twilio credentials not set!');
-  }
-  
-  if (!process.env.ULTRAVOX_CORPUS_ID) {
-    console.warn('⚠️  ULTRAVOX_CORPUS_ID environment variable not set!');
-  }
-
-  if (ADMIN_API_KEY === 'your-secure-admin-key') {
-    console.warn('⚠️  Please set ADMIN_API_KEY environment variable for production!');
-  }
-});
-
-export default app;Resources - Memory: ${processMemMB}MB (${systemMemPercent}% of system), Active Calls: ${serverMetrics.activeCalls}, Bookings: ${bookings.length}`);
+    console.log(`📊 Resources - Memory: ${processMemMB}MB (${systemMemPercent}% of system), Active Calls: ${serverMetrics.activeCalls}, Bookings: ${bookings.length}`);
   } catch (error) {
     console.error('Error updating metrics:', error);
   }
@@ -839,7 +841,7 @@ app.post('/webhook/twilio', validateWebhookInput, handleValidationErrors, async 
       const twiml = new twilio.twiml.VoiceResponse();
       twiml.say({ 
         voice: TWILIO_VOICE as any 
-      }, `Thank you for calling Bella Vista Italian Restaurant. We're currently experiencing high call volume and all our lines are busy. Please try calling back in a few minutes, or visit our website to make a reservation online. We apologize for the inconvenience and look forward to serving you soon.`);
+      }, 'Thank you for calling Bella Vista Italian Restaurant. We are currently experiencing high call volume and all our lines are busy. Please try calling back in a few minutes, or visit our website to make a reservation online. We apologize for the inconvenience and look forward to serving you soon.');
       
       const twimlString = twiml.toString();
       res.type('text/xml');
