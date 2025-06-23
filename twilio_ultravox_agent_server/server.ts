@@ -173,10 +173,10 @@ async function transferActiveCall(ultravoxCallId: string) {
     }
 
     const twiml = new twilio.twiml.VoiceResponse();
-    twiml.say({ voice: 'Polly.Joanna' }, message);
+    twiml.say({ voice: 'Polly.Aria-Neural' }, message);
     const dial = twiml.dial({ timeout: 30 });
     dial.number(humanAgentNumber);
-    twiml.say({ voice: 'Polly.Joanna' },
+    twiml.say({ voice: 'Polly.Aria-Neural' },
       "I'm sorry, but I wasn't able to connect you with our booking team right now. Please try calling back during our regular business hours. Thank you for calling Bella Vista!");
 
     const updatedCall = await twilioClient.calls(callData.twilioCallSid)
