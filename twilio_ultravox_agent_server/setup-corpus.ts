@@ -37,7 +37,7 @@ async function createCorpus(): Promise<string> {
     headers: {
       'Content-Type': 'application/json',
       'X-API-Key': API_KEY!
-    } as HeadersInit,
+    },
     body: JSON.stringify({
       name: 'Bella Vista Restaurant Menu',
       description: 'Complete menu, special requirements, and restaurant information for Bella Vista Italian Restaurant'
@@ -62,7 +62,7 @@ async function requestUploadUrl(corpusId: string): Promise<UploadResponse> {
     headers: {
       'Content-Type': 'application/json',
       'X-API-Key': API_KEY!
-    } as HeadersInit,
+    },
     body: JSON.stringify({
       mimeType: 'text/markdown'
     })
@@ -108,7 +108,7 @@ async function createSource(corpusId: string, documentId: string): Promise<void>
     headers: {
       'Content-Type': 'application/json',
       'X-API-Key': API_KEY!
-    } as HeadersInit,
+    },
     body: JSON.stringify({
       upload: {
         documentId: documentId
@@ -200,7 +200,7 @@ async function addSpecialRequirementsContent(corpusId: string): Promise<void> {
     headers: {
       'Content-Type': 'application/json',
       'X-API-Key': API_KEY!
-    } as HeadersInit,
+    },
     body: JSON.stringify({
       mimeType: 'text/markdown'
     })
@@ -217,7 +217,7 @@ async function addSpecialRequirementsContent(corpusId: string): Promise<void> {
     method: 'PUT',
     headers: {
       'Content-Type': 'text/markdown'
-    } as HeadersInit,
+    },
     body: specialRequirements
   });
 
@@ -227,7 +227,7 @@ async function addSpecialRequirementsContent(corpusId: string): Promise<void> {
     headers: {
       'Content-Type': 'application/json',
       'X-API-Key': API_KEY!
-    } as HeadersInit,
+    },
     body: JSON.stringify({
       upload: { documentId }
     })
@@ -244,7 +244,7 @@ async function testCorpusQuery(corpusId: string): Promise<void> {
     headers: {
       'Content-Type': 'application/json',
       'X-API-Key': API_KEY!
-    } as HeadersInit,
+    },
     body: JSON.stringify({
       query: 'What vegetarian options do you have?'
     })
