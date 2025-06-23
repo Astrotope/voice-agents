@@ -315,6 +315,14 @@ callManager.on('callError', (callId: string, error: string) => {
 // Mock data storage with enhanced debugging
 const bookings: Booking[] = [];
 
+// Sequential booking counter
+let bookingCounter = 1;
+
+// Function to generate voice-friendly IDs
+function generateSequentialId(): string {
+  return `BV${bookingCounter.toString().padStart(3, '0')}`;
+}
+
 // Add a debug test booking to verify the array works
 if (DEBUG_BOOKINGS) {
   const testBooking: Booking = {
@@ -969,7 +977,7 @@ app.post('/tools/make-reservation', validateReservationInput, handleValidationEr
 
     // CREATE THE BOOKING
     const booking: Booking = {
-      id: `BV${Date.now()}`,
+      id: generateSequentialId(),
       customerName: customerName.trim(),
       date,
       time,
