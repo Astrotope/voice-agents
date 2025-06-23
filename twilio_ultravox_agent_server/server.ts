@@ -82,36 +82,44 @@ function generateAvailableSlots(date: string): BookingSlot[] {
 }
 
 function isRestaurantOpen(): { isOpen: boolean; nextOpenTime?: string; message: string } {
-  const now = new Date();
-  const currentDay = now.toLocaleDateString('en-US', { weekday: 'lowercase' }) as keyof typeof openingHours;
-  const currentTime = now.toTimeString().slice(0, 5);
-  
-  const todayHours = openingHours[currentDay];
-  
-  if (todayHours.closed) {
+  try {
+    const now = new Date();
+    const currentDay = now.toLocaleDateString('en-US', { weekday: 'lowercase' }) as keyof typeof openingHours;
+    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
+    
+    const todayHours = openingHours[currentDay];
+    
+    if (todayHours.closed) {
+      return {
+        isOpen: false,
+        message: `We're closed today (${currentDay}). Our regular hours are Monday through Sunday, five PM to ten PM (eleven PM on weekends).`
+      };
+    }
+    
+    const isOpen = currentTime >= todayHours.open && currentTime <= todayHours.close;
+    
+    if (isOpen) {
+      return {
+        isOpen: true,
+        message: `We're currently open until ${formatTime(todayHours.close)} today.`
+      };
+    } else if (currentTime < todayHours.open) {
+      return {
+        isOpen: false,
+        nextOpenTime: todayHours.open,
+        message: `We're currently closed but will open at ${formatTime(todayHours.open)} today.`
+      };
+    } else {
+      return {
+        isOpen: false,
+        message: `We're closed for today. We'll reopen tomorrow at ${formatTime(todayHours.open)}.`
+      };
+    }
+  } catch (error) {
+    console.error('Error in isRestaurantOpen:', error);
     return {
       isOpen: false,
-      message: `We're closed today (${currentDay}). Our regular hours are Tuesday through Sunday, five PM to ten PM (eleven PM on weekends).`
-    };
-  }
-  
-  const isOpen = currentTime >= todayHours.open && currentTime <= todayHours.close;
-  
-  if (isOpen) {
-    return {
-      isOpen: true,
-      message: `We're currently open until ${formatTime(todayHours.close)} today.`
-    };
-  } else if (currentTime < todayHours.open) {
-    return {
-      isOpen: false,
-      nextOpenTime: todayHours.open,
-      message: `We're currently closed but will open at ${formatTime(todayHours.open)} today.`
-    };
-  } else {
-    return {
-      isOpen: false,
-      message: `We're closed for today. We'll reopen tomorrow at ${formatTime(todayHours.open)}.`
+      message: "We're open Monday through Sunday from 5:00 PM to 10:00 PM (11:00 PM on weekends)."
     };
   }
 }
