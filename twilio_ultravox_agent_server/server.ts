@@ -623,7 +623,7 @@ TOOLS AVAILABLE:
 
 Always speak naturally and conversationally, use the customer's name, confirm all booking details clearly, and provide excellent hospitality that reflects our restaurant's values.`,
       model: 'fixie-ai/ultravox',
-      voice: 'Kylee-English-NewZealand',
+      voice: 'Steve-English-Australian',
       temperature: 0.3,
       firstSpeaker: 'FIRST_SPEAKER_AGENT',
       selectedTools: [
