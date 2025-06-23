@@ -600,10 +600,11 @@ Always speak naturally and conversationally, use the customer's name, confirm al
       firstSpeaker: 'FIRST_SPEAKER_AGENT',
       selectedTools: [
         {
-          toolName: "queryCorpus",
+          toolName: "queryCorpus", 
           authTokens: {},
           parameterOverrides: {
-            corpusId: process.env.ULTRAVOX_CORPUS_ID || "your_corpus_id_here"
+            corpus_id: process.env.ULTRAVOX_CORPUS_ID || "your_corpus_id_here",
+            max_results: 8  // More chunks for comprehensive menu/policy answers
           }
         },
         { toolName: "hangUp" },
