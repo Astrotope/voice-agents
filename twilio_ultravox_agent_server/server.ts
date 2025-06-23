@@ -1595,4 +1595,34 @@ app.listen(port, () => {
   console.log(`📡 Stream status: http://localhost:${port}/webhook/stream-status`);
   console.log(`🚨 Error webhook: http://localhost:${port}/webhook/twilio-errors`);
   console.log(`🏥 Health check: http://localhost:${port}/health`);
-  console.log(`📊
+  console.log(`📊 Active calls: http://localhost:${port}/active-calls (requires API key)`);
+  console.log(`📈 Metrics: http://localhost:${port}/metrics (requires API key)`);
+  console.log(`⚙️  Configuration: http://localhost:${port}/config (requires API key)`);
+  console.log(`📝 Bookings: http://localhost:${port}/bookings (requires API key)`);
+  console.log(`🧪 Debug booking: POST http://localhost:${port}/debug/create-booking (requires API key)`);
+  console.log(`👤 Agent: ${AGENT_NAME}`);
+  console.log(`🗣️ Ultravox Voice: ${ULTRAVOX_VOICE}`);
+  console.log(`📞 Twilio Voice: ${TWILIO_VOICE}`);
+  console.log(`🔢 Max Concurrent Calls: ${MAX_CONCURRENT_CALLS}`);
+  console.log(`🔐 Admin endpoints require X-API-Key header`);
+  console.log(`🧪 Debug mode - Bookings: ${DEBUG_BOOKINGS}, Tools: ${DEBUG_TOOLS}, Requests: ${DEBUG_REQUESTS}`);
+  console.log(`📊 Initial bookings array length: ${bookings.length}`);
+
+  if (!process.env.ULTRAVOX_API_KEY) {
+    console.warn('⚠️  ULTRAVOX_API_KEY environment variable not set!');
+  }
+
+  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+    console.warn('⚠️  Twilio credentials not set!');
+  }
+  
+  if (!process.env.ULTRAVOX_CORPUS_ID) {
+    console.warn('⚠️  ULTRAVOX_CORPUS_ID environment variable not set!');
+  }
+
+  if (ADMIN_API_KEY === 'your-secure-admin-key') {
+    console.warn('⚠️  Please set ADMIN_API_KEY environment variable for production!');
+  }
+});
+
+export default app;
