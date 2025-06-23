@@ -75,7 +75,19 @@ HUMAN_AGENT_PHONE=+1234567890
 
 # Admin API Configuration
 ADMIN_API_KEY=bella-vista-your_generated_key_here
-MAX_CONCURRENT_CALLS=5
+
+# Call Management
+MAX_CONCURRENT_CALLS=5                   # Maximum simultaneous calls
+CALL_CLEANUP_INTERVAL=300000             # Call cleanup interval (5 minutes)
+
+# Agent Configuration
+AGENT_NAME=Sofia                         # AI agent's name
+ULTRAVOX_VOICE=Steve-English-Australian  # Voice for Ultravox calls
+TWILIO_VOICE=Polly.Aria-Neural           # Voice for Twilio announcements
+
+# Environment
+NODE_ENV=production                      # development | production
+
 ```
 
 ### Admin API Key Generation
