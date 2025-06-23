@@ -785,6 +785,7 @@ app.post('/tools/check-availability', [
   body('date').isString().notEmpty(),
   body('partySize').isInt({ min: 1, max: 12 })
 ], handleValidationErrors, (req, res) => {
+  // Set header FIRST - before any logic
   res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
   
   try {
@@ -833,6 +834,7 @@ app.post('/tools/check-availability', [
 });
 
 app.post('/tools/make-reservation', validateReservationInput, handleValidationErrors, (req, res) => {
+  // Set header FIRST
   res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
   
   try {
@@ -901,6 +903,7 @@ app.post('/tools/make-reservation', validateReservationInput, handleValidationEr
 });
 
 app.get('/tools/daily-specials', (req, res) => {
+  // Set header FIRST
   res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
   
   try {
@@ -920,6 +923,7 @@ app.get('/tools/daily-specials', (req, res) => {
 });
 
 app.get('/tools/opening-hours', (req, res) => {
+  // Set header FIRST
   res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
   
   try {
