@@ -192,7 +192,6 @@ async function transferActiveCall(ultravoxCallId: string) {
 
   } catch (error) {
     console.error('Error transferring call:', error);
-    // Fix: Type assertion for error
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     throw {
       status: 'error',
@@ -209,6 +208,7 @@ const tools = [
   {
     modelToolName: "checkAvailability",
     description: "Check available reservation times for a specific date and party size",
+    defaultReaction: "AGENT_REACTION_SPEAKS",
     dynamicParameters: [
       {
         name: "date",
@@ -239,6 +239,7 @@ const tools = [
   {
     modelToolName: "makeReservation",
     description: "Create a restaurant reservation with all required details",
+    defaultReaction: "AGENT_REACTION_SPEAKS",
     dynamicParameters: [
       {
         name: "customerName",
@@ -296,6 +297,7 @@ const tools = [
   {
     modelToolName: "getDailySpecials",
     description: "Get today's soup and meal specials",
+    defaultReaction: "AGENT_REACTION_SPEAKS",
     dynamicParameters: [],
     http: {
       baseUrlPattern: `${toolsBaseUrl}/tools/daily-specials`,
@@ -305,6 +307,7 @@ const tools = [
   {
     modelToolName: "checkOpeningHours",
     description: "Check if the restaurant is currently open and get opening hours information",
+    defaultReaction: "AGENT_REACTION_SPEAKS",
     dynamicParameters: [],
     http: {
       baseUrlPattern: `${toolsBaseUrl}/tools/opening-hours`,
@@ -359,7 +362,12 @@ const tools = [
 
 // Tool endpoints
 app.post('/tools/check-availability', (req, res) => {
+  // Set header FIRST - before any logic
+  res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
+  
   try {
+    console.log('Checking availability endpoint called with:', req.body);
+    
     const { date, partySize = 1 } = req.body;
 
     if (!date) {
@@ -380,16 +388,15 @@ app.post('/tools/check-availability', (req, res) => {
     const availableSlots = generateAvailableSlots(searchDate)
       .filter(slot => slot.available && slot.maxPartySize >= partySize);
 
-    // Set header BEFORE res.json()
-    res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
-
     if (availableSlots.length === 0) {
+      console.log(`No availability found for ${partySize} people on ${searchDate}`);
       return res.json({
         success: false,
         message: `Unfortunately, we don't have any availability for ${partySize} ${partySize === 1 ? 'person' : 'people'} on ${searchDate}. Would you like to try a different date?`,
         availableSlots: []
       });
     } else {
+      console.log(`Found ${availableSlots.length} available slots for ${partySize} people on ${searchDate}`);
       return res.json({
         success: true,
         message: `Great! I found ${availableSlots.length} available ${availableSlots.length === 1 ? 'time' : 'times'} for ${partySize} ${partySize === 1 ? 'person' : 'people'} on ${searchDate}.`,
@@ -408,7 +415,12 @@ app.post('/tools/check-availability', (req, res) => {
 });
 
 app.post('/tools/make-reservation', (req, res) => {
+  // Set header FIRST
+  res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
+  
   try {
+    console.log('Make reservation endpoint called with:', req.body);
+    
     const { customerName, date, time, partySize, specialRequirements } = req.body;
 
     if (!customerName || !date || !time || !partySize) {
@@ -455,9 +467,8 @@ app.post('/tools/make-reservation', (req, res) => {
 
     const confirmationMessage = `Perfect! I've confirmed your reservation for ${customerName}, party of ${partySize}, on ${date} at ${time}. Your confirmation number is ${booking.id}.${specialRequirements ? ` We've noted your special requirements: ${specialRequirements}.` : ''} We look forward to seeing you at Bella Vista Italian Restaurant!`;
 
-    // Set header BEFORE res.json()
-    res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
-
+    console.log(`Reservation created successfully: ${booking.id}`);
+    
     return res.json({
       success: true,
       message: confirmationMessage,
@@ -479,10 +490,12 @@ app.post('/tools/make-reservation', (req, res) => {
 });
 
 app.get('/tools/daily-specials', (req, res) => {
+  // Set header FIRST
+  res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
+  
   try {
-    // Set header BEFORE res.json()
-    res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
-
+    console.log('Daily specials endpoint called');
+    
     return res.json({
       success: true,
       message: `Today's specials are: For soup, we have ${dailySpecials.soup}. And our chef's special meal is ${dailySpecials.meal}.`,
@@ -497,11 +510,13 @@ app.get('/tools/daily-specials', (req, res) => {
 });
 
 app.get('/tools/opening-hours', (req, res) => {
+  // Set header FIRST
+  res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
+  
   try {
+    console.log('Opening hours endpoint called');
+    
     const openStatus = isRestaurantOpen();
-
-    // Set header BEFORE res.json()
-    res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
 
     return res.json({
       success: true,
@@ -536,7 +551,6 @@ app.post('/tools/transfer-call', async (req, res) => {
 
   } catch (error) {
     console.error('Error transferring call:', error);
-    // Fix: Type assertion for error
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return res.status(500).json({
       status: 'error',
@@ -565,17 +579,31 @@ IMPORTANT GUIDELINES:
 - Stay focused on booking reservations and answering menu questions
 - Be warm, professional, and helpful like a great restaurant host
 
+CRITICAL: ALWAYS RESPOND AFTER USING TOOLS
+- After checking availability, IMMEDIATELY tell the customer what you found
+- After making a reservation, IMMEDIATELY confirm the details
+- After looking up specials or hours, IMMEDIATELY share the information
+- After using queryCorpus for menu questions, IMMEDIATELY share what you discovered
+- Never wait for the customer to ask what happened - always speak first after tool use
+
 CONVERSATION FLOW:
 1. Warm greeting and AI agent introduction with explanation
 2. Mention call recording for service improvement
 3. Get customer's name and greet them personally
 4. Ask how you can help them today
 5. For bookings: gather date, time preference, party size
-6. Check availability and offer alternatives if needed
+6. Check availability and IMMEDIATELY respond with results
 7. Confirm all details before making reservation
 8. Ask about special requirements (dietary, accessibility, celebrations)
-9. Provide confirmation number and restaurant details
+9. IMMEDIATELY provide confirmation number and restaurant details after booking
 10. Offer human transfer if needed or if customer seems frustrated
+
+TOOL USAGE RESPONSES:
+- checkAvailability: Always immediately tell them what times are available or suggest alternatives
+- makeReservation: Always immediately confirm the booking with confirmation number
+- getDailySpecials: Always immediately tell them the specials
+- checkOpeningHours: Always immediately tell them if you're open and what the hours are
+- queryCorpus: Always immediately share the menu/policy information you found
 
 HUMAN TRANSFER:
 If customers request to speak with a human or if you encounter complex requests:
@@ -600,11 +628,11 @@ Always speak naturally and conversationally, use the customer's name, confirm al
       firstSpeaker: 'FIRST_SPEAKER_AGENT',
       selectedTools: [
         {
-          toolName: "queryCorpus", 
+          toolName: "queryCorpus",
           authTokens: {},
           parameterOverrides: {
             corpus_id: process.env.ULTRAVOX_CORPUS_ID || "your_corpus_id_here",
-            max_results: 8  // More chunks for comprehensive menu/policy answers
+            max_results: 8
           }
         },
         { toolName: "hangUp" },
