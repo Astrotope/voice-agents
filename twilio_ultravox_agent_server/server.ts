@@ -300,13 +300,16 @@ const humanAgentNumber = process.env.HUMAN_AGENT_PHONE || "+1234567890";
 const updateMetrics = async () => {
   try {
     const memUsage = process.memoryUsage();
+    const totalSystemMem = os.totalmem();
+    
     serverMetrics.memoryUsage = memUsage;
     serverMetrics.uptime = process.uptime();
     
-    // Log resource usage periodically
-    const memMB = Math.round(memUsage.heapUsed / 1024 / 1024);
-    const memPercent = Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100);
-    console.log(`📊 Resources - Memory: ${memMB}MB (${memPercent}%), Active Calls: ${serverMetrics.activeCalls}`);
+    // Process memory vs system memory
+    const processMemMB = Math.round(memUsage.rss / 1024 / 1024);
+    const systemMemPercent = Math.round((memUsage.rss / totalSystemMem) * 100);
+    
+    console.log(`📊 Resources - Memory: ${processMemMB}MB (${systemMemPercent}% of system), Active Calls: ${serverMetrics.activeCalls}`);
   } catch (error) {
     console.error('Error updating metrics:', error);
   }
