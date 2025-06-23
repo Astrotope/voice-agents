@@ -111,7 +111,7 @@ async function createSource(corpusId: string, documentId: string): Promise<void>
     },
     body: JSON.stringify({
       upload: {
-        documentId: documentId
+        documentIds: [documentId]  // Changed from documentId to documentIds array
       }
     })
   });
@@ -229,7 +229,7 @@ async function addSpecialRequirementsContent(corpusId: string): Promise<void> {
       'X-API-Key': API_KEY!
     },
     body: JSON.stringify({
-      upload: { documentId }
+      upload: { documentIds: [documentId] }  // Changed from documentId to documentIds array
     })
   });
 
