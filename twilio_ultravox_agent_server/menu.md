@@ -1,112 +1,90 @@
-# Code Review & Validation Summary
+# Bella Vista Italian Restaurant Menu
 
-## Issues Found and Fixed
+*Dietary Indicators: V = Vegetarian | VG = Vegan | GF = Gluten-Free | DF = Dairy-Free | N = Contains Nuts*
 
-### 1. **Import Issues**
-- ✅ **Fixed**: Added missing `node-fetch` import
-- ✅ **Fixed**: Updated to `node-fetch@2.7.0` for better TypeScript compatibility
-- ✅ **Added**: Type definitions for `@types/node-fetch`
+## Appetizers
+- **Bruschetta Classica** - $12 *(V)*  
+  Toasted bread topped with fresh tomatoes, basil, garlic, and extra virgin olive oil
+- **Antipasto Platter** - $18 *(GF available)*  
+  Selection of cured meats, artisanal cheeses, olives, and roasted vegetables
+- **Calamari Fritti** - $16 *(DF available)*  
+  Crispy fried squid rings served with marinara sauce and lemon aioli
+- **Burrata Caprese** - $15 *(V, GF)*  
+  Creamy burrata cheese with heirloom tomatoes, fresh basil, and balsamic glaze
 
-### 2. **Twilio Integration Corrections**
-- ✅ **Fixed**: TwiML response structure (confirmed correct `<Connect><Stream>` format)
-- ✅ **Fixed**: Return property name from `streamUrl` to `joinUrl` to match Ultravox API
-- ✅ **Added**: Missing `firstSpeaker: "FIRST_SPEAKER_AGENT"` parameter for incoming calls
+## Soups
+- **Minestrone Soup** - $8 *(V, VG available, GF)*  
+  Traditional Italian vegetable soup with beans and pasta
+- **Cream of Mushroom** - $9 *(V, GF)*  
+  Rich and creamy soup with wild mushrooms and truffle oil
 
-### 3. **Ultravox API Parameter Validation**
-- ✅ **Verified**: All API endpoints and parameters match current documentation
-- ✅ **Fixed**: Tool parameter structure uses correct `temporaryTool` format
-- ✅ **Added**: Corpus ID configuration with parameter overrides
-- ✅ **Verified**: Agent creation parameters match current API schema
+## Pasta & Risotto
+- **Spaghetti Carbonara** - $22  
+  Classic Roman pasta with pancetta, eggs, pecorino romano, and black pepper
+- **Fettuccine Alfredo** - $20 *(V)*  
+  Fresh fettuccine in rich parmesan cream sauce
+- **Penne Arrabbiata** - $18 *(V, VG available)*  
+  Penne pasta in spicy tomato sauce with garlic and red chilies
+- **Lasagna della Nonna** - $24  
+  Traditional layered pasta with meat sauce, ricotta, and mozzarella
+- **Risotto ai Porcini** - $26 *(V, GF)*  
+  Creamy arborio rice with porcini mushrooms and parmesan
+- **Seafood Linguine** - $28 *(DF available)*  
+  Linguine with clams, mussels, shrimp in white wine sauce
 
-### 4. **Tool Implementation Validation**
-- ✅ **Verified**: Tool response headers (`X-Ultravox-Agent-Reaction`) are correct
-- ✅ **Verified**: Tool parameter locations and schema definitions are valid
-- ✅ **Verified**: HTTP method and URL patterns are properly structured
+## Main Courses
+- **Osso Buco alla Milanese** - $38 *(GF)*  
+  Braised veal shanks with saffron risotto and gremolata
+- **Chicken Parmigiana** - $26  
+  Breaded chicken breast topped with marinara and mozzarella, served with spaghetti
+- **Grilled Branzino** - $32 *(GF, DF)*  
+  Whole Mediterranean sea bass grilled with herbs and lemon
+- **Veal Piccata** - $34 *(GF)*  
+  Pan-seared veal medallions in lemon caper sauce
+- **Eggplant Parmigiana** - $22 *(V)*  
+  Layered eggplant with marinara and mozzarella
 
-### 5. **Missing Features Added**
-- ✅ **Added**: Environment variable for corpus ID
-- ✅ **Added**: Proper error handling for corpus queries
-- ✅ **Added**: Support for natural language date parsing
+## Pizza (Wood-fired)
+- **Margherita** - $18 *(V)*  
+  San Marzano tomatoes, fresh mozzarella, basil
+- **Pepperoni** - $20  
+  Tomato sauce, mozzarella, spicy pepperoni
+- **Quattro Stagioni** - $24  
+  Four seasons pizza with artichokes, ham, mushrooms, and olives
+- **Prosciutto e Arugula** - $26  
+  White pizza with prosciutto, arugula, and shaved parmesan
+- **Vegan Margherita** - $20 *(VG, DF)*  
+  San Marzano tomatoes, dairy-free mozzarella, fresh basil
 
-## Menu Enhancements
+## Desserts
+- **Tiramisu** - $12 *(V)*  
+  Classic Italian dessert with coffee-soaked ladyfingers and mascarpone
+- **Panna Cotta** - $10 *(V, GF)*  
+  Vanilla custard with berry compote
+- **Cannoli Siciliani** - $11 *(V)*  
+  Crispy shells filled with sweet ricotta and chocolate chips
+- **Gelato** - $8 *(V, VG options available)*  
+  Ask your server for today's flavors
+- **Dark Chocolate Torte** - $13 *(VG, GF, DF)*  
+  Rich chocolate cake made with almond flour
 
-### Dietary Indicators Added
-- **V** = Vegetarian
-- **VG** = Vegan  
-- **GF** = Gluten-Free
-- **DF** = Dairy-Free
-- **N** = Contains Nuts
+## Beverages
+- **Wine Selection** - Ask your server about our extensive Italian wine list *(V, VG)*
+- **Italian Sodas** - $4 *(V, VG)*  
+  Aranciata, Limonata, Chinotto
+- **Espresso** - $4 *(V, VG)*
+- **Cappuccino** - $5 *(V, DF available with oat milk)*
+- **Coffee** - $3 *(V, VG)*
 
-### Examples:
-- Bruschetta Classica *(V)*
-- Minestrone Soup *(V, VG available, GF)*
-- Grilled Branzino *(GF, DF)*
-- Vegan Margherita Pizza *(VG, DF)*
+## Daily Specials
+We feature fresh daily specials including:
+- **Soup of the Day** - Ask your server *(Various dietary options available)*
+- **Fish Special** - Fresh catch prepared by our chef *(Usually GF, DF)*
+- **Seasonal Pasta** - Made with ingredients from our local farmers market *(V, VG options available)*
 
-### Accommodations Section
-- Comprehensive dietary modification options
-- Clear pricing for substitutions (+$3 for GF pasta, +$2 for DF cheese)
-- Instructions for allergy considerations
-
-## Validated Against Documentation
-
-### ✅ Agent Creation
-- Confirmed system prompt structure
-- Verified tool selection format
-- Validated inactivity message configuration
-
-### ✅ Call Management  
-- Proper medium configuration for Twilio
-- Correct first speaker settings
-- Valid recording and timeout parameters
-
-### ✅ Tool Integration
-- Verified built-in tool usage (queryCorpus, hangUp)
-- Confirmed custom tool parameter structure
-- Validated response type handling
-
-### ✅ RAG Implementation
-- Proper corpus creation workflow
-- Correct query corpus tool configuration
-- Valid file upload process
-
-## Additional Improvements Made
-
-### 1. **Better Error Handling**
-- More descriptive error messages
-- Proper HTTP status codes
-- Graceful fallbacks for tool failures
-
-### 2. **Business Logic Enhancements**
-- Realistic availability simulation
-- Natural language date parsing
-- Proper confirmation number generation
-
-### 3. **Development Experience**
-- Comprehensive setup instructions
-- Automated corpus setup script
-- Clear environment variable documentation
-
-### 4. **Production Readiness**
-- Health check endpoint
-- Admin endpoints for monitoring
-- Proper TypeScript configuration
-
-## Key Features Confirmed Working
-
-1. **Voice Agent Persona**: Sofia, friendly restaurant host
-2. **Call Flow**: Greeting → Name collection → Booking assistance → Confirmation
-3. **Tools**: Availability checking, reservation creation, daily specials, menu queries
-4. **RAG**: Menu and dietary information lookup
-5. **Business Rules**: Party size limits, advance booking validation
-6. **Twilio Integration**: Proper webhook handling and TwiML responses
-
-## Files Validated
-- ✅ `server.ts` - Main Express server with all integrations
-- ✅ `package.json` - Dependencies and build configuration  
-- ✅ `tsconfig.json` - TypeScript compiler settings
-- ✅ `menu.md` - Restaurant menu with dietary indicators
-- ✅ `setup-corpus.ts` - Automated RAG setup script
-- ✅ `.env.example` - Environment configuration template
-
-The solution is now fully validated against the Ultravox documentation and ready for deployment.
+## Dietary Accommodations
+- **Gluten-free pasta** available for any pasta dish (+$3)
+- **Dairy-free cheese** available for pizzas and pasta (+$2)
+- **Vegan modifications** available for most dishes - please ask your server
+- **Nut allergies**: Please inform your server - we can modify most dishes
+- All dishes can be prepared to accommodate specific dietary needs with advance notice
