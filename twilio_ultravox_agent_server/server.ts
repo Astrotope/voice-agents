@@ -26,10 +26,31 @@ const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'your-secure-admin-key';
 const CALL_RETENTION_TIME = 30000; // 30 seconds
 const MAX_EVENT_LISTENERS = 100;
 
+// Enhanced debugging flags
+const DEBUG_BOOKINGS = true;
+const DEBUG_TOOLS = true;
+const DEBUG_REQUESTS = true;
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Debug middleware to log all requests
+if (DEBUG_REQUESTS) {
+  app.use((req, res, next) => {
+    const timestamp = new Date().toISOString();
+    console.log(`🌐 [${timestamp}] ${req.method} ${req.url}`);
+    
+    // Log headers for tool endpoints
+    if (req.url.startsWith('/tools/')) {
+      console.log(`🔧 Headers:`, req.headers);
+      console.log(`🔧 Body:`, req.body);
+    }
+    
+    next();
+  });
+}
 
 // Input validation middleware
 const validateWebhookInput = [
@@ -130,6 +151,13 @@ interface ServerMetrics {
   memoryUsage: NodeJS.MemoryUsage;
   cpuUsage: number;
   uptime: number;
+  toolCalls: {
+    checkAvailability: number;
+    makeReservation: number;
+    dailySpecials: number;
+    openingHours: number;
+    transferCall: number;
+  };
 }
 
 // Enhanced call management with semaphore pattern
@@ -259,7 +287,14 @@ let serverMetrics: ServerMetrics = {
   errors: 0,
   memoryUsage: process.memoryUsage(),
   cpuUsage: 0,
-  uptime: 0
+  uptime: 0,
+  toolCalls: {
+    checkAvailability: 0,
+    makeReservation: 0,
+    dailySpecials: 0,
+    openingHours: 0,
+    transferCall: 0
+  }
 };
 
 // Event handlers
@@ -277,8 +312,25 @@ callManager.on('callError', (callId: string, error: string) => {
   console.error(`❌ Call error: ${callId}, error: ${error}`);
 });
 
-// Mock data storage
+// Mock data storage with enhanced debugging
 const bookings: Booking[] = [];
+
+// Add a debug test booking to verify the array works
+if (DEBUG_BOOKINGS) {
+  const testBooking: Booking = {
+    id: 'TEST001',
+    customerName: 'Test Customer',
+    date: '2025-06-25',
+    time: '7:00 PM',
+    partySize: 2,
+    specialRequirements: 'Test booking for debugging',
+    createdAt: new Date()
+  };
+  bookings.push(testBooking);
+  console.log(`🧪 Added test booking to verify array: ${testBooking.id}`);
+  console.log(`🧪 Current bookings array length: ${bookings.length}`);
+}
+
 const dailySpecials = {
   soup: "Tuscan White Bean Soup with rosemary and pancetta",
   meal: "Pan-Seared Salmon with lemon herb risotto and seasonal vegetables"
@@ -309,7 +361,7 @@ const updateMetrics = async () => {
     const processMemMB = Math.round(memUsage.rss / 1024 / 1024);
     const systemMemPercent = Math.round((memUsage.rss / totalSystemMem) * 100);
     
-    console.log(`📊 Resources - Memory: ${processMemMB}MB (${systemMemPercent}% of system), Active Calls: ${serverMetrics.activeCalls}`);
+    console.log(`📊 Resources - Memory: ${processMemMB}MB (${systemMemPercent}% of system), Active Calls: ${serverMetrics.activeCalls}, Bookings: ${bookings.length}`);
   } catch (error) {
     console.error('Error updating metrics:', error);
   }
@@ -393,6 +445,7 @@ function formatTime(time: string): string {
 const handleValidationErrors = (req: express.Request, res: express.Response, next: express.NextFunction): void => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
+    console.log(`❌ Validation errors:`, errors.array());
     res.status(400).json({ 
       error: 'Validation failed', 
       details: errors.array() 
@@ -783,7 +836,7 @@ Always speak naturally and conversationally, use the customer's name, confirm al
   }
 });
 
-// Enhanced tool endpoints with validation
+// Enhanced tool endpoints with extensive debugging
 app.post('/tools/check-availability', [
   body('date').isString().notEmpty(),
   body('partySize').isInt({ min: 1, max: 12 })
@@ -791,9 +844,16 @@ app.post('/tools/check-availability', [
   // Set header FIRST - before any logic
   res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
   
+  // Track tool usage
+  serverMetrics.toolCalls.checkAvailability++;
+  
+  if (DEBUG_TOOLS) {
+    console.log(`🔧 [${new Date().toISOString()}] checkAvailability called`);
+    console.log(`🔧 Request data:`, JSON.stringify(req.body, null, 2));
+    console.log(`🔧 Headers:`, JSON.stringify(req.headers, null, 2));
+  }
+  
   try {
-    console.log('Checking availability endpoint called with:', req.body);
-    
     const { date, partySize = 1 } = req.body;
 
     let searchDate = date;
@@ -811,15 +871,21 @@ app.post('/tools/check-availability', [
       .filter(slot => slot.available && slot.maxPartySize >= partySize);
 
     if (availableSlots.length === 0) {
-      console.log(`No availability found for ${partySize} people on ${searchDate}`);
-      return res.json({
+      console.log(`❌ No availability found for ${partySize} people on ${searchDate}`);
+      const response = {
         success: false,
         message: `Unfortunately, we don't have any availability for ${partySize} ${partySize === 1 ? 'person' : 'people'} on ${searchDate}. Would you like to try a different date?`,
         availableSlots: []
-      });
+      };
+      
+      if (DEBUG_TOOLS) {
+        console.log(`🔧 Sending response:`, JSON.stringify(response, null, 2));
+      }
+      
+      return res.json(response);
     } else {
-      console.log(`Found ${availableSlots.length} available slots for ${partySize} people on ${searchDate}`);
-      return res.json({
+      console.log(`✅ Found ${availableSlots.length} available slots for ${partySize} people on ${searchDate}`);
+      const response = {
         success: true,
         message: `Great! I found ${availableSlots.length} available ${availableSlots.length === 1 ? 'time' : 'times'} for ${partySize} ${partySize === 1 ? 'person' : 'people'} on ${searchDate}.`,
         date: searchDate,
@@ -828,10 +894,16 @@ app.post('/tools/check-availability', [
           time: slot.time,
           maxPartySize: slot.maxPartySize
         }))
-      });
+      };
+      
+      if (DEBUG_TOOLS) {
+        console.log(`🔧 Sending response:`, JSON.stringify(response, null, 2));
+      }
+      
+      return res.json(response);
     }
   } catch (error) {
-    console.error('Error checking availability:', error);
+    console.error('❌ Error checking availability:', error);
     return res.status(500).json({ error: "Sorry, I'm having trouble checking availability right now. Please try again." });
   }
 });
@@ -840,35 +912,62 @@ app.post('/tools/make-reservation', validateReservationInput, handleValidationEr
   // Set header FIRST
   res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
   
+  // Track tool usage
+  serverMetrics.toolCalls.makeReservation++;
+  
+  if (DEBUG_TOOLS) {
+    console.log(`🔧 [${new Date().toISOString()}] makeReservation called`);
+    console.log(`🔧 Request data:`, JSON.stringify(req.body, null, 2));
+    console.log(`🔧 Headers:`, JSON.stringify(req.headers, null, 2));
+    console.log(`🔧 Current bookings array length BEFORE: ${bookings.length}`);
+  }
+  
   try {
-    console.log('Make reservation endpoint called with:', req.body);
-    
     const { customerName, date, time, partySize, specialRequirements } = req.body;
 
     if (partySize > 12) {
-      return res.json({
+      const response = {
         success: false,
         message: "I'm sorry, but we can only accommodate parties of up to twelve people through our booking system. For larger parties, I'd recommend calling us directly at (555) 123-4567 to speak with our manager about special arrangements."
-      });
+      };
+      
+      if (DEBUG_TOOLS) {
+        console.log(`🔧 Party size too large, sending response:`, JSON.stringify(response, null, 2));
+      }
+      
+      return res.json(response);
     }
 
     if (partySize < 1) {
-      return res.json({
+      const response = {
         success: false,
         message: "The party size must be at least one person."
-      });
+      };
+      
+      if (DEBUG_TOOLS) {
+        console.log(`🔧 Party size too small, sending response:`, JSON.stringify(response, null, 2));
+      }
+      
+      return res.json(response);
     }
 
     const availableSlots = generateAvailableSlots(date);
     const requestedSlot = availableSlots.find(slot => slot.time === time);
 
     if (!requestedSlot || !requestedSlot.available || requestedSlot.maxPartySize < partySize) {
-      return res.json({
+      const response = {
         success: false,
         message: `I'm sorry, but that time slot is no longer available. Let me check what other times we have available for ${date}.`
-      });
+      };
+      
+      if (DEBUG_TOOLS) {
+        console.log(`🔧 Time slot not available, sending response:`, JSON.stringify(response, null, 2));
+      }
+      
+      return res.json(response);
     }
 
+    // CREATE THE BOOKING
     const booking: Booking = {
       id: `BV${Date.now()}`,
       customerName: customerName.trim(),
@@ -879,13 +978,21 @@ app.post('/tools/make-reservation', validateReservationInput, handleValidationEr
       createdAt: new Date()
     };
 
+    // ADD TO ARRAY - THIS IS THE CRITICAL PART
     bookings.push(booking);
+
+    if (DEBUG_BOOKINGS) {
+      console.log(`📝 BOOKING CREATED: ${booking.id}`);
+      console.log(`📝 Booking details:`, JSON.stringify(booking, null, 2));
+      console.log(`📝 Bookings array length AFTER push: ${bookings.length}`);
+      console.log(`📝 All bookings:`, bookings.map(b => ({ id: b.id, name: b.customerName, date: b.date, time: b.time })));
+    }
 
     const confirmationMessage = `Perfect! I've confirmed your reservation for ${customerName}, party of ${partySize}, on ${date} at ${time}. Your confirmation number is ${booking.id}.${specialRequirements ? ` We've noted your special requirements: ${specialRequirements}.` : ''} We look forward to seeing you at Bella Vista Italian Restaurant!`;
 
-    console.log(`Reservation created successfully: ${booking.id}`);
+    console.log(`✅ Reservation created successfully: ${booking.id}`);
     
-    return res.json({
+    const response = {
       success: true,
       message: confirmationMessage,
       booking: {
@@ -896,9 +1003,15 @@ app.post('/tools/make-reservation', validateReservationInput, handleValidationEr
         partySize: booking.partySize,
         specialRequirements: booking.specialRequirements
       }
-    });
+    };
+    
+    if (DEBUG_TOOLS) {
+      console.log(`🔧 Sending success response:`, JSON.stringify(response, null, 2));
+    }
+    
+    return res.json(response);
   } catch (error) {
-    console.error('Error making reservation:', error);
+    console.error('❌ Error making reservation:', error);
     return res.status(500).json({
       error: "I apologize, but I'm having trouble processing your reservation right now. Please try again in a moment."
     });
@@ -909,16 +1022,27 @@ app.get('/tools/daily-specials', (req, res) => {
   // Set header FIRST
   res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
   
+  // Track tool usage
+  serverMetrics.toolCalls.dailySpecials++;
+  
+  if (DEBUG_TOOLS) {
+    console.log(`🔧 [${new Date().toISOString()}] dailySpecials called`);
+  }
+  
   try {
-    console.log('Daily specials endpoint called');
-    
-    return res.json({
+    const response = {
       success: true,
       message: `Today's specials are: For soup, we have ${dailySpecials.soup}. And our chef's special meal is ${dailySpecials.meal}.`,
       specials: dailySpecials
-    });
+    };
+    
+    if (DEBUG_TOOLS) {
+      console.log(`🔧 Sending response:`, JSON.stringify(response, null, 2));
+    }
+    
+    return res.json(response);
   } catch (error) {
-    console.error('Error getting daily specials:', error);
+    console.error('❌ Error getting daily specials:', error);
     return res.status(500).json({
       error: "I'm sorry, I can't access today's specials right now. Please ask your server when you arrive."
     });
@@ -929,12 +1053,17 @@ app.get('/tools/opening-hours', (req, res) => {
   // Set header FIRST
   res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
   
+  // Track tool usage
+  serverMetrics.toolCalls.openingHours++;
+  
+  if (DEBUG_TOOLS) {
+    console.log(`🔧 [${new Date().toISOString()}] openingHours called`);
+  }
+  
   try {
-    console.log('Opening hours endpoint called');
-    
     const openStatus = isRestaurantOpen();
 
-    return res.json({
+    const response = {
       success: true,
       isOpen: openStatus.isOpen,
       message: openStatus.message,
@@ -943,9 +1072,15 @@ app.get('/tools/opening-hours', (req, res) => {
         "Friday and Saturday": "5:00 PM to 11:00 PM",
         "Sunday": "5:00 PM to 10:00 PM"
       }
-    });
+    };
+    
+    if (DEBUG_TOOLS) {
+      console.log(`🔧 Sending response:`, JSON.stringify(response, null, 2));
+    }
+    
+    return res.json(response);
   } catch (error) {
-    console.error('Error checking opening hours:', error);
+    console.error('❌ Error checking opening hours:', error);
     return res.status(500).json({
       error: "I'm having trouble checking our hours right now."
     });
@@ -958,22 +1093,62 @@ app.post('/tools/transfer-call', [
   body('customerName').optional().isString().trim(),
   body('summary').optional().isString().isLength({ max: 1000 })
 ], handleValidationErrors, async (req, res) => {
+  
+  // Track tool usage
+  serverMetrics.toolCalls.transferCall++;
+  
+  if (DEBUG_TOOLS) {
+    console.log(`🔧 [${new Date().toISOString()}] transferCall called`);
+    console.log(`🔧 Request data:`, JSON.stringify(req.body, null, 2));
+  }
+  
   try {
     const { callId, reason, customerName, summary } = req.body;
-    console.log(`Request to transfer call with callId: ${callId}`);
-    console.log(`Transfer reason: ${reason}`);
+    console.log(`📞 Request to transfer call with callId: ${callId}`);
+    console.log(`📞 Transfer reason: ${reason}`);
 
     const result = await transferActiveCall(callId);
     return res.json(result);
 
   } catch (error) {
-    console.error('Error transferring call:', error);
+    console.error('❌ Error transferring call:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return res.status(500).json({
       status: 'error',
       message: 'Failed to transfer call',
       error: errorMessage
     });
+  }
+});
+
+// Debug endpoint to manually test booking creation
+app.post('/debug/create-booking', authenticateAdmin, (req, res) => {
+  if (DEBUG_BOOKINGS) {
+    console.log(`🧪 Debug endpoint called to create test booking`);
+    
+    const testBooking: Booking = {
+      id: `DEBUG${Date.now()}`,
+      customerName: 'Debug Test Customer',
+      date: '2025-06-26',
+      time: '8:00 PM',
+      partySize: 4,
+      specialRequirements: 'Debug test booking',
+      createdAt: new Date()
+    };
+    
+    bookings.push(testBooking);
+    
+    console.log(`🧪 Debug booking created: ${testBooking.id}`);
+    console.log(`🧪 Bookings array length: ${bookings.length}`);
+    
+    return res.json({
+      success: true,
+      booking: testBooking,
+      totalBookings: bookings.length,
+      allBookings: bookings
+    });
+  } else {
+    return res.json({ error: 'Debug mode not enabled' });
   }
 });
 
@@ -1047,10 +1222,19 @@ app.post('/webhook/twilio-errors', (req, res) => {
 // Enhanced admin and monitoring endpoints with authentication
 
 app.get('/bookings', authenticateAdmin, (req, res) => {
+  if (DEBUG_BOOKINGS) {
+    console.log(`📊 Bookings endpoint called - returning ${bookings.length} bookings`);
+    console.log(`📊 All bookings:`, bookings.map(b => ({ id: b.id, name: b.customerName, date: b.date, time: b.time })));
+  }
+  
   return res.json({ 
     bookings,
     total: bookings.length,
-    recent: bookings.slice(-10) // Last 10 bookings
+    recent: bookings.slice(-10), // Last 10 bookings
+    debug: {
+      arrayLength: bookings.length,
+      debugMode: DEBUG_BOOKINGS
+    }
   });
 });
 
@@ -1085,7 +1269,11 @@ app.get('/health', (req, res) => {
       total: Math.round(memUsage.heapTotal / 1024 / 1024),
       percentage: Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100)
     },
-    utilizationPercent: Math.round((callManager.getActiveCallCount() / MAX_CONCURRENT_CALLS) * 100)
+    utilizationPercent: Math.round((callManager.getActiveCallCount() / MAX_CONCURRENT_CALLS) * 100),
+    bookings: {
+      total: bookings.length,
+      recent: bookings.slice(-3).map(b => ({ id: b.id, name: b.customerName }))
+    }
   };
   
   return res.json(healthStatus);
@@ -1098,7 +1286,8 @@ app.get('/metrics', authenticateAdmin, (req, res) => {
     uptime: process.uptime(),
     activeCalls: callManager.getActiveCallCount(),
     utilizationPercent: Math.round((callManager.getActiveCallCount() / MAX_CONCURRENT_CALLS) * 100),
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    bookingsTotal: bookings.length
   };
   
   return res.json(currentMetrics);
@@ -1113,7 +1302,13 @@ app.get('/config', authenticateAdmin, (req, res) => {
     maxConcurrentCalls: MAX_CONCURRENT_CALLS,
     callCleanupInterval: CALL_CLEANUP_INTERVAL,
     toolsBaseUrl: toolsBaseUrl,
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    debug: {
+      bookings: DEBUG_BOOKINGS,
+      tools: DEBUG_TOOLS,
+      requests: DEBUG_REQUESTS
+    },
+    currentBookingsCount: bookings.length
   });
 });
 
@@ -1140,11 +1335,15 @@ app.listen(port, () => {
   console.log(`📊 Active calls: http://localhost:${port}/active-calls (requires API key)`);
   console.log(`📈 Metrics: http://localhost:${port}/metrics (requires API key)`);
   console.log(`⚙️  Configuration: http://localhost:${port}/config (requires API key)`);
+  console.log(`📝 Bookings: http://localhost:${port}/bookings (requires API key)`);
+  console.log(`🧪 Debug booking: POST http://localhost:${port}/debug/create-booking (requires API key)`);
   console.log(`👤 Agent: ${AGENT_NAME}`);
   console.log(`🗣️ Ultravox Voice: ${ULTRAVOX_VOICE}`);
   console.log(`📞 Twilio Voice: ${TWILIO_VOICE}`);
   console.log(`🔢 Max Concurrent Calls: ${MAX_CONCURRENT_CALLS}`);
   console.log(`🔐 Admin endpoints require X-API-Key header`);
+  console.log(`🧪 Debug mode - Bookings: ${DEBUG_BOOKINGS}, Tools: ${DEBUG_TOOLS}, Requests: ${DEBUG_REQUESTS}`);
+  console.log(`📊 Initial bookings array length: ${bookings.length}`);
 
   if (!process.env.ULTRAVOX_API_KEY) {
     console.warn('⚠️  ULTRAVOX_API_KEY environment variable not set!');
