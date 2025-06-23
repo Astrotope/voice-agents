@@ -12,7 +12,7 @@ const port = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // Add URL encoded parsing for Twilio
+app.use(express.urlencoded({ extended: true }));
 
 // Twilio client for call management
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
@@ -57,10 +57,10 @@ const openingHours = {
 // Human agent contact info
 const humanAgentNumber = process.env.HUMAN_AGENT_PHONE || "+1234567890";
 
-// Active calls tracking (like in the advanced example)
+// Active calls tracking
 const activeCalls = new Map();
 
-// Generate available time slots (mock booking system)
+// Utility functions
 function generateAvailableSlots(date: string): BookingSlot[] {
   const slots: BookingSlot[] = [];
   const times = [
@@ -68,9 +68,8 @@ function generateAvailableSlots(date: string): BookingSlot[] {
     "7:30 PM", "8:00 PM", "8:30 PM", "9:00 PM", "9:30 PM"
   ];
   
-  // Mock availability - some slots randomly unavailable
   times.forEach(time => {
-    const isAvailable = Math.random() > 0.3; // 70% chance available
+    const isAvailable = Math.random() > 0.3;
     slots.push({
       date,
       time,
@@ -82,11 +81,10 @@ function generateAvailableSlots(date: string): BookingSlot[] {
   return slots;
 }
 
-// Check if restaurant is currently open
 function isRestaurantOpen(): { isOpen: boolean; nextOpenTime?: string; message: string } {
   const now = new Date();
   const currentDay = now.toLocaleDateString('en-US', { weekday: 'lowercase' }) as keyof typeof openingHours;
-  const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
+  const currentTime = now.toTimeString().slice(0, 5);
   
   const todayHours = openingHours[currentDay];
   
@@ -118,7 +116,6 @@ function isRestaurantOpen(): { isOpen: boolean; nextOpenTime?: string; message: 
   }
 }
 
-// Format time for natural speech
 function formatTime(time: string): string {
   const [hour, minute] = time.split(':');
   const hourNum = parseInt(hour);
@@ -127,7 +124,75 @@ function formatTime(time: string): string {
   return minute === '00' ? `${displayHour} ${ampm}` : `${displayHour}:${minute} ${ampm}`;
 }
 
-// Tool implementations with improved structure following advanced example
+// Ultravox utility functions
+async function createUltravoxCall(callConfig: any) {
+  try {
+    const response = await fetch('https://api.ultravox.ai/api/calls', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': process.env.ULTRAVOX_API_KEY!
+      },
+      body: JSON.stringify(callConfig)
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Ultravox API error: ${error}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error creating Ultravox call:', error);
+    throw error;
+  }
+}
+
+async function transferActiveCall(ultravoxCallId: string) {
+  try {
+    const callData = activeCalls.get(ultravoxCallId);
+    if (!callData || !callData.twilioCallSid) {
+      throw new Error('Call not found or invalid CallSid');
+    }
+
+    const openStatus = isRestaurantOpen();
+    let message: string;
+    
+    if (openStatus.isOpen) {
+      message = "I'm connecting you with our booking team. Please note that during busy serving hours, there may be a brief wait as our staff is focused on providing excellent service to our dining guests.";
+    } else {
+      message = "I'm attempting to connect you with our booking team. Since we're currently closed, there may be no immediate answer. Please try calling back during our regular hours if no one is available.";
+    }
+
+    const twiml = new twilio.twiml.VoiceResponse();
+    twiml.say({ voice: 'Polly.Joanna' }, message);
+    const dial = twiml.dial({ timeout: 30 });
+    dial.number(humanAgentNumber);
+    twiml.say({ voice: 'Polly.Joanna' }, 
+      "I'm sorry, but I wasn't able to connect you with our booking team right now. Please try calling back during our regular business hours. Thank you for calling Bella Vista!");
+
+    const updatedCall = await twilioClient.calls(callData.twilioCallSid)
+      .update({
+        twiml: twiml.toString()
+      });
+
+    return {
+      status: 'success',
+      message: 'Call transfer initiated',
+      callDetails: updatedCall
+    };
+
+  } catch (error) {
+    console.error('Error transferring call:', error);
+    throw {
+      status: 'error',
+      message: 'Failed to transfer call',
+      error: error.message
+    };
+  }
+}
+
+// Tool definitions
 const toolsBaseUrl = process.env.BASE_URL || 'http://localhost:3000';
 
 const tools = [
@@ -291,7 +356,6 @@ app.post('/tools/check-availability', (req, res) => {
       return res.status(400).json({ error: "Date is required" });
     }
 
-    // Parse natural language dates
     let searchDate = date;
     const today = new Date();
     
@@ -336,14 +400,12 @@ app.post('/tools/make-reservation', (req, res) => {
   try {
     const { customerName, date, time, partySize, specialRequirements } = req.body;
     
-    // Validate required fields
     if (!customerName || !date || !time || !partySize) {
       return res.status(400).json({ 
         error: "Customer name, date, time, and party size are all required to make a reservation." 
       });
     }
 
-    // Business rule validations
     if (partySize > 12) {
       return res.json({
         success: false,
@@ -358,7 +420,6 @@ app.post('/tools/make-reservation', (req, res) => {
       });
     }
 
-    // Check if slot is still available
     const availableSlots = generateAvailableSlots(date);
     const requestedSlot = availableSlots.find(slot => slot.time === time);
     
@@ -369,7 +430,6 @@ app.post('/tools/make-reservation', (req, res) => {
       });
     }
 
-    // Create the booking
     const booking: Booking = {
       id: `BV${Date.now()}`,
       customerName,
@@ -470,226 +530,119 @@ app.post('/tools/transfer-call', async (req, res) => {
   }
 });
 
-app.post('/tools/change-stage', (req, res) => {
-  try {
-    const { newStage, context } = req.body;
-    
-    let systemPrompt: string;
-    let tools: string[] = [];
-    
-    switch (newStage) {
-      case 'greeting':
-        systemPrompt = `You are Sofia, a warm and professional AI host for Bella Vista Italian Restaurant. You're in the greeting stage of the call. Warmly welcome the customer, introduce yourself, explain that you're an AI agent helping because lines get busy during service, and mention call recording. Get their name and ask how you can help them today.`;
-        tools = ['changeCallStage', 'checkOpeningHours'];
-        break;
-        
-      case 'booking':
-        systemPrompt = `You are Sofia, helping with restaurant reservations. You're in the booking stage. Focus on gathering: date, time preference, and party size. Use checkAvailability to find options, then makeReservation to confirm. Ask about special requirements. Be efficient but friendly.`;
-        tools = ['checkAvailability', 'makeReservation', 'changeCallStage', 'transferToHuman'];
-        break;
-        
-      case 'menu_consultation':
-        systemPrompt = `You are Sofia, helping customers understand our menu. Use the RAG tool to answer questions about menu items, dietary restrictions, and ingredients. Offer daily specials. Guide them back to booking when ready.`;
-        tools = ['queryCorpus', 'getDailySpecials', 'changeCallStage'];
-        break;
-        
-      case 'confirmation':
-        systemPrompt = `You are Sofia, finalizing the customer's reservation. Confirm all details clearly: name, date, time, party size, special requirements. Provide confirmation number. Ask if they need anything else or want to hear about specials.`;
-        tools = ['changeCallStage', 'getDailySpecials', 'hangUp'];
-        break;
-        
-      case 'human_transfer':
-        systemPrompt = `You are Sofia, preparing to transfer the customer to a human agent. Explain the transfer, set expectations about availability during service hours, and gather any final information that would help the human agent.`;
-        tools = ['transferToHuman', 'checkOpeningHours'];
-        break;
-        
-      default:
-        return res.status(400).json({ error: 'Invalid stage specified' });
-    }
-    
-    // Return new stage configuration
-    res.json({
-      systemPrompt,
-      selectedTools: tools.map(toolName => ({ toolName })),
-      voice: "Jessica",
-      temperature: 0.3
-    });
-    
-    res.setHeader('X-Ultravox-Response-Type', 'new-stage');
-    res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
-    
-  } catch (error) {
-    console.error('Error changing call stage:', error);
-    res.status(500).json({ 
-      error: "I'm having trouble with the conversation flow right now." 
-    });
-  }
-});
-
-// Ultravox webhook handler for Twilio
+// Twilio webhook handler
 app.post('/webhook/twilio', async (req, res) => {
   try {
-    console.log('Received Twilio webhook:', req.body);
+    console.log('Incoming call received');
+    const twilioCallSid = req.body.CallSid;
+    console.log('Twilio CallSid:', twilioCallSid);
     
-    // Create agent call with Ultravox
-    const agentCall = await createUltravoxCall();
-    
-    if (!agentCall.success) {
-      console.error('Failed to create Ultravox call:', agentCall.error);
-      return res.status(500).json({ error: 'Failed to create voice agent call' });
-    }
+    const callConfig = {
+      systemPrompt: `You are Sofia, a friendly and professional AI host for Bella Vista Italian Restaurant. You help customers make reservations and answer questions about our menu.
 
-    // Return TwiML response to connect to Ultravox
-    const twimlResponse = `
-      <?xml version="1.0" encoding="UTF-8"?>
-      <Response>
-        <Connect>
-          <Stream url="${agentCall.streamUrl}" />
-        </Connect>
-      </Response>
-    `;
+IMPORTANT GUIDELINES:
+- Always greet customers warmly and introduce yourself as Sofia, the AI Voice Agent for Bella Vista
+- Explain that we use AI agents because our lines get very busy during serving hours while our staff focuses on providing excellent service to dining guests
+- Mention that calls are recorded to help improve our service quality
+- Get the customer's name early and use it throughout the conversation
+- Use natural speech forms (say "seven thirty PM" not "7:30 PM", "March fifteenth" not "3/15")
+- Stay focused on booking reservations and answering menu questions
+- Be warm, professional, and helpful like a great restaurant host
 
-    res.type('text/xml');
-    res.send(twimlResponse);
-  } catch (error) {
-    console.error('Webhook error:', error);
-    res.status(500).json({ error: 'Webhook processing failed' });
-  }
-});
+CONVERSATION FLOW:
+1. Warm greeting and AI agent introduction with explanation
+2. Mention call recording for service improvement  
+3. Get customer's name and greet them personally
+4. Ask how you can help them today
+5. For bookings: gather date, time preference, party size
+6. Check availability and offer alternatives if needed
+7. Confirm all details before making reservation
+8. Ask about special requirements (dietary, accessibility, celebrations)
+9. Provide confirmation number and restaurant details
+10. Offer human transfer if needed or if customer seems frustrated
 
-// Ultravox utility functions (following the advanced example pattern)
-async function createUltravoxCall(callConfig) {
-  try {
-    const response = await fetch('https://api.ultravox.ai/api/calls', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': process.env.ULTRAVOX_API_KEY!
-      },
-      body: JSON.stringify(callConfig)
+HUMAN TRANSFER:
+If customers request to speak with a human or if you encounter complex requests:
+- Use the transferCall tool with the automatic callId parameter
+- Explain that during serving hours, staff may be busy with dining guests
+- Set appropriate expectations about response times
+- Always offer transfer if the customer seems frustrated or has special needs
+
+TOOLS AVAILABLE:
+- checkOpeningHours: Check if we're currently open and get hours
+- checkAvailability: Check reservation times for specific dates
+- makeReservation: Create confirmed reservations
+- getDailySpecials: Get soup and meal of the day
+- queryCorpus: Answer menu questions and dietary information
+- transferCall: Connect to human booking agent (uses automatic callId)
+- hangUp: End call when customer is finished
+
+Always speak naturally and conversationally, use the customer's name, confirm all booking details clearly, and provide excellent hospitality that reflects our restaurant's values.`,
+      model: 'fixie-ai/ultravox',
+      voice: 'Jessica',
+      temperature: 0.3,
+      firstSpeaker: 'FIRST_SPEAKER_AGENT',
+      selectedTools: [
+        { 
+          toolName: "queryCorpus", 
+          authTokens: {},
+          parameterOverrides: {
+            corpusId: process.env.ULTRAVOX_CORPUS_ID || "your_corpus_id_here"
+          }
+        },
+        { toolName: "hangUp" },
+        ...tools.map(tool => ({ temporaryTool: tool }))
+      ],
+      medium: { "twilio": {} },
+      inactivityMessages: [
+        {
+          duration: "30s",
+          message: "Are you still there? I'm here to help with your reservation."
+        },
+        {
+          duration: "15s", 
+          message: "If there's nothing else I can help you with, I'll end our call."
+        },
+        {
+          duration: "10s",
+          message: "Thank you for calling Bella Vista Italian Restaurant. Have a wonderful day! Goodbye.",
+          endBehavior: "END_BEHAVIOR_HANG_UP_SOFT"
+        }
+      ]
+    };
+
+    const response = await createUltravoxCall(callConfig);
+
+    activeCalls.set(response.callId, {
+      twilioCallSid: twilioCallSid,
+      timestamp: new Date().toISOString()
     });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Ultravox API error: ${error}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error creating Ultravox call:', error);
-    throw error;
-  }
-}
-
-// Enhanced transfer function following the advanced example
-async function transferActiveCall(ultravoxCallId: string) {
-  try {
-    const callData = activeCalls.get(ultravoxCallId);
-    if (!callData || !callData.twilioCallSid) {
-      throw new Error('Call not found or invalid CallSid');
-    }
-
-    const openStatus = isRestaurantOpen();
-    let message: string;
-    
-    if (openStatus.isOpen) {
-      message = "I'm connecting you with our booking team. Please note that during busy serving hours, there may be a brief wait as our staff is focused on providing excellent service to our dining guests.";
-    } else {
-      message = "I'm attempting to connect you with our booking team. Since we're currently closed, there may be no immediate answer. Please try calling back during our regular hours if no one is available.";
-    }
-
-    // Create TwiML for transfer
     const twiml = new twilio.twiml.VoiceResponse();
-    twiml.say({ voice: 'Polly.Joanna' }, message);
-    const dial = twiml.dial({ timeout: 30 });
-    dial.number(humanAgentNumber);
-    twiml.say({ voice: 'Polly.Joanna' }, 
-      "I'm sorry, but I wasn't able to connect you with our booking team right now. Please try calling back during our regular business hours. Thank you for calling Bella Vista!");
+    const connect = twiml.connect();
+    connect.stream({
+      url: response.joinUrl,
+      name: 'bella-vista-agent'
+    });
 
-    // Update the active call with transfer TwiML
-    const updatedCall = await twilioClient.calls(callData.twilioCallSid)
-      .update({
-        twiml: twiml.toString()
-      });
-
-    return {
-      status: 'success',
-      message: 'Call transfer initiated',
-      callDetails: updatedCall
-    };
+    const twimlString = twiml.toString();
+    res.type('text/xml');
+    res.send(twimlString);
 
   } catch (error) {
-    console.error('Error transferring call:', error);
-    throw {
-      status: 'error',
-      message: 'Failed to transfer call',
-      error: error.message
-    };
-  }
-}
-
-app.post('/tools/change-stage', (req, res) => {
-  try {
-    const { newStage, context } = req.body;
-    
-    let systemPrompt: string;
-    let tools: string[] = [];
-    
-    switch (newStage) {
-      case 'greeting':
-        systemPrompt = `You are Sofia, a warm and professional AI host for Bella Vista Italian Restaurant. You're in the greeting stage of the call. Warmly welcome the customer, introduce yourself, explain that you're an AI agent helping because lines get busy during service, and mention call recording. Get their name and ask how you can help them today.`;
-        tools = ['checkOpeningHours'];
-        break;
-        
-      case 'booking':
-        systemPrompt = `You are Sofia, helping with restaurant reservations. You're in the booking stage. Focus on gathering: date, time preference, and party size. Use checkAvailability to find options, then makeReservation to confirm. Ask about special requirements. Be efficient but friendly.`;
-        tools = ['checkAvailability', 'makeReservation', 'transferCall'];
-        break;
-        
-      case 'menu_consultation':
-        systemPrompt = `You are Sofia, helping customers understand our menu. Use the RAG tool to answer questions about menu items, dietary restrictions, and ingredients. Offer daily specials. Guide them back to booking when ready.`;
-        tools = ['queryCorpus', 'getDailySpecials'];
-        break;
-        
-      case 'confirmation':
-        systemPrompt = `You are Sofia, finalizing the customer's reservation. Confirm all details clearly: name, date, time, party size, special requirements. Provide confirmation number. Ask if they need anything else or want to hear about specials.`;
-        tools = ['getDailySpecials', 'hangUp'];
-        break;
-        
-      case 'human_transfer':
-        systemPrompt = `You are Sofia, preparing to transfer the customer to a human agent. Explain the transfer, set expectations about availability during service hours, and gather any final information that would help the human agent.`;
-        tools = ['transferCall', 'checkOpeningHours'];
-        break;
-        
-      default:
-        return res.status(400).json({ error: 'Invalid stage specified' });
-    }
-    
-    // Return new stage configuration
-    res.json({
-      systemPrompt,
-      selectedTools: tools.map(toolName => ({ toolName })),
-      voice: "Jessica",
-      temperature: 0.3
-    });
-    
-    res.setHeader('X-Ultravox-Response-Type', 'new-stage');
-    res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
-    
-  } catch (error) {
-    console.error('Error changing call stage:', error);
-    res.status(500).json({ 
-      error: "I'm having trouble with the conversation flow right now." 
-    });
+    console.error('Error handling incoming call:', error);
+    const twiml = new twilio.twiml.VoiceResponse();
+    twiml.say('Sorry, there was an error connecting your call. Please try again or call us directly.');
+    res.type('text/xml');
+    res.send(twiml.toString());
   }
 });
 
-// Get all bookings (for admin/testing)
+// Admin endpoints
 app.get('/bookings', (req, res) => {
   res.json({ bookings });
 });
 
-// Get active calls (following advanced example pattern)
 app.get('/active-calls', (req, res) => {
   const calls = Array.from(activeCalls.entries()).map(([ultravoxCallId, data]) => ({
     ultravoxCallId,
@@ -698,7 +651,6 @@ app.get('/active-calls', (req, res) => {
   res.json(calls);
 });
 
-// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
@@ -716,159 +668,6 @@ app.listen(port, () => {
   
   if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
     console.warn('⚠️  Twilio credentials not set!');
-  }
-});
-
-export default app;API-Key': process.env.ULTRAVOX_API_KEY!
-      }
-    });
-    
-    if (listResponse.ok) {
-      const agents = await listResponse.json();
-      const existingAgent = agents.results?.find((agent: any) => agent.name === agentName);
-      if (existingAgent) {
-        console.log('Using existing agent:', existingAgent.agentId);
-        return existingAgent.agentId;
-      }
-    }
-  } catch (error) {
-    console.log('Could not check for existing agents, creating new one');
-  }
-
-  // Create new agent
-  const systemPrompt = `You are Sofia, a friendly and professional AI host for Bella Vista Italian Restaurant. You help customers make reservations and answer questions about our menu.
-
-IMPORTANT GUIDELINES:
-- Always greet customers warmly and introduce yourself as Sofia, the AI Voice Agent for Bella Vista
-- Explain that we use AI agents because our lines get very busy during serving hours while our staff focuses on providing excellent service to dining guests
-- Mention that calls are recorded to help improve our service quality
-- Get the customer's name early and use it throughout the conversation
-- Use natural speech forms (say "seven thirty PM" not "7:30 PM", "March fifteenth" not "3/15")
-- Stay focused on booking reservations and answering menu questions
-- Be warm, professional, and helpful like a great restaurant host
-
-CONVERSATION STAGES:
-You can transition between different conversation stages when appropriate:
-- GREETING: Welcome, introduction, name collection
-- BOOKING: Reservation details and confirmation  
-- MENU_CONSULTATION: Menu questions and daily specials
-- CONFIRMATION: Final reservation confirmation
-- HUMAN_TRANSFER: Connect to human agent when needed
-
-HUMAN TRANSFER:
-If customers request to speak with a human or if you encounter complex requests:
-- Use the transferToHuman tool
-- Explain that during serving hours, staff may be busy with dining guests
-- Set appropriate expectations about response times
-- Always offer transfer if the customer seems frustrated or has special needs
-
-CONVERSATION FLOW:
-1. Warm greeting and AI agent introduction with explanation
-2. Mention call recording for service improvement  
-3. Get customer's name and greet them personally
-4. Ask how you can help them today
-5. For bookings: gather date, time preference, party size
-6. Check availability and offer alternatives if needed
-7. Confirm all details before making reservation
-8. Ask about special requirements (dietary, accessibility, celebrations)
-9. Provide confirmation number and restaurant details
-10. Offer human transfer if needed
-
-TOOLS AVAILABLE:
-- checkOpeningHours: Check if we're currently open and get hours
-- checkAvailability: Check reservation times for specific dates
-- makeReservation: Create confirmed reservations
-- getDailySpecials: Get soup and meal of the day
-- queryCorpus: Answer menu questions and dietary information
-- transferToHuman: Connect to human booking agent
-- changeCallStage: Move to different conversation phases
-- hangUp: End call when customer is finished
-
-SPECIAL SITUATIONS:
-- Large parties (8+): Still process but mention they may need manager confirmation
-- Complex dietary needs: Use queryCorpus for detailed information
-- Busy times: Explain our hours and suggest optimal calling times
-- Technical issues: Offer human transfer as alternative
-
-Always speak naturally and conversationally, use the customer's name, confirm all booking details clearly, and provide excellent hospitality that reflects our restaurant's values.`;
-
-  try {
-    const response = await fetch('https://api.ultravox.ai/api/agents', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': process.env.ULTRAVOX_API_KEY!
-      },
-      body: JSON.stringify({
-        name: agentName,
-        callTemplate: {
-          systemPrompt,
-          voice: "Jessica",
-          languageHint: "en",
-          temperature: 0.3,
-          recordingEnabled: true,
-          selectedTools: [
-            { 
-              toolName: "queryCorpus", 
-              authTokens: {},
-              parameterOverrides: {
-                corpusId: process.env.ULTRAVOX_CORPUS_ID || "your_corpus_id_here"
-              }
-            },
-            { toolName: "hangUp" },
-            ...tools.map(tool => ({ temporaryTool: tool }))
-          ],
-          inactivityMessages: [
-            {
-              duration: "30s",
-              message: "Are you still there? I'm here to help with your reservation."
-            },
-            {
-              duration: "15s", 
-              message: "If there's nothing else I can help you with, I'll end our call."
-            },
-            {
-              duration: "10s",
-              message: "Thank you for calling Bella Vista Italian Restaurant. Have a wonderful day! Goodbye.",
-              endBehavior: "END_BEHAVIOR_HANG_UP_SOFT"
-            }
-          ]
-        }
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to create agent: ${error}`);
-    }
-
-    const agent = await response.json();
-    console.log('Created new agent:', agent.agentId);
-    return agent.agentId;
-  } catch (error) {
-    console.error('Error creating agent:', error);
-    throw error;
-  }
-}
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
-
-// Get all bookings (for admin/testing)
-app.get('/bookings', (req, res) => {
-  res.json({ bookings });
-});
-
-// Start server
-app.listen(port, () => {
-  console.log(`🍝 Restaurant booking server running on port ${port}`);
-  console.log(`📞 Webhook endpoint: http://localhost:${port}/webhook/twilio`);
-  console.log(`🏥 Health check: http://localhost:${port}/health`);
-  
-  if (!process.env.ULTRAVOX_API_KEY) {
-    console.warn('⚠️  ULTRAVOX_API_KEY environment variable not set!');
   }
 });
 
