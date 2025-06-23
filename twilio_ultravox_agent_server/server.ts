@@ -3,18 +3,96 @@ import cors from 'cors';
 import { config } from 'dotenv';
 import fetch from 'node-fetch';
 import twilio from 'twilio';
+import rateLimit from 'express-rate-limit';
+import { EventEmitter } from 'events';
+import os from 'os';
+import process from 'process';
+import { body, validationResult } from 'express-validator';
 
 config();
 
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Configuration from environment variables
+const MAX_CONCURRENT_CALLS = parseInt(process.env.MAX_CONCURRENT_CALLS || '5');
+const AGENT_NAME = process.env.AGENT_NAME || 'Sofia';
+const ULTRAVOX_VOICE = process.env.ULTRAVOX_VOICE || 'Steve-English-Australian';
+const TWILIO_VOICE = process.env.TWILIO_VOICE || 'Polly.Aria-Neural';
+const CALL_CLEANUP_INTERVAL = parseInt(process.env.CALL_CLEANUP_INTERVAL || '300000');
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'your-secure-admin-key';
+
+// Constants
+const CALL_RETENTION_TIME = 30000; // 30 seconds
+const MAX_EVENT_LISTENERS = 100;
+
 // Middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Twilio client for call management
+// Input validation middleware
+const validateWebhookInput = [
+  body('CallSid').isString().notEmpty().withMessage('CallSid is required'),
+  body('From').optional().isString(),
+  body('To').optional().isString()
+];
+
+const validateReservationInput = [
+  body('customerName').isString().trim().isLength({ min: 1, max: 100 }).withMessage('Valid customer name required'),
+  body('date').isString().matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('Date must be in YYYY-MM-DD format'),
+  body('time').isString().notEmpty().withMessage('Time is required'),
+  body('partySize').isInt({ min: 1, max: 12 }).withMessage('Party size must be between 1 and 12'),
+  body('specialRequirements').optional().isString().isLength({ max: 500 })
+];
+
+// Authentication middleware for admin endpoints
+const authenticateAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const apiKey = req.headers['x-api-key'] || req.query.apiKey;
+  if (apiKey !== ADMIN_API_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+};
+
+// Enhanced rate limiting with multiple strategies
+const createRateLimit = (windowMs: number, max: number, message: string) => 
+  rateLimit({
+    windowMs,
+    max,
+    message: { error: message },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+      // Use combination of IP and User-Agent for better tracking
+      return `${req.ip}-${req.get('User-Agent')?.slice(0, 50) || 'unknown'}`;
+    }
+  });
+
+const webhookRateLimit = createRateLimit(
+  60 * 1000, 
+  MAX_CONCURRENT_CALLS * 3, 
+  'Too many call attempts, please try again later'
+);
+
+const toolRateLimit = createRateLimit(
+  60 * 1000, 
+  200, 
+  'Too many tool requests, please slow down'
+);
+
+const adminRateLimit = createRateLimit(
+  60 * 1000, 
+  30, 
+  'Too many admin requests'
+);
+
+// Apply rate limiting
+app.use('/webhook/twilio', webhookRateLimit);
+app.use('/tools/', toolRateLimit);
+app.use(['/metrics', '/config', '/active-calls'], adminRateLimit);
+
+// Twilio client
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
 // Types
@@ -36,6 +114,168 @@ interface Booking {
   createdAt: Date;
 }
 
+interface ActiveCall {
+  twilioCallSid: string;
+  timestamp: string;
+  status: 'connecting' | 'active' | 'ending' | 'ended';
+  lastActivity: Date;
+}
+
+interface ServerMetrics {
+  totalCalls: number;
+  activeCalls: number;
+  rejectedCalls: number;
+  errors: number;
+  memoryUsage: NodeJS.MemoryUsage;
+  cpuUsage: number;
+  uptime: number;
+}
+
+// Enhanced call management with semaphore pattern
+class CallManager {
+  private activeCalls = new Map<string, ActiveCall>();
+  private activeCallCount = 0;
+  private semaphore = 0; // Track pending call creation
+  private events = new EventEmitter();
+
+  constructor() {
+    this.events.setMaxListeners(MAX_EVENT_LISTENERS);
+    this.setupCleanup();
+  }
+
+  // Atomic operation to reserve a call slot
+  reserveCallSlot(): boolean {
+    if (this.activeCallCount + this.semaphore >= MAX_CONCURRENT_CALLS) {
+      return false;
+    }
+    this.semaphore++;
+    return true;
+  }
+
+  // Release reserved slot (if call creation failed)
+  releaseCallSlot(): void {
+    if (this.semaphore > 0) {
+      this.semaphore--;
+    }
+  }
+
+  // Register successful call (converts reservation to active call)
+  registerCall(callId: string, twilioCallSid: string): void {
+    this.activeCalls.set(callId, {
+      twilioCallSid,
+      timestamp: new Date().toISOString(),
+      status: 'connecting',
+      lastActivity: new Date()
+    });
+    
+    this.activeCallCount++;
+    if (this.semaphore > 0) {
+      this.semaphore--;
+    }
+    
+    this.events.emit('callStarted', callId, twilioCallSid);
+    console.log(`📞 Call registered: ${callId} (${this.activeCallCount}/${MAX_CONCURRENT_CALLS})`);
+  }
+
+  updateCallStatus(callId: string, status: ActiveCall['status']): void {
+    const call = this.activeCalls.get(callId);
+    if (call) {
+      call.status = status;
+      call.lastActivity = new Date();
+    }
+  }
+
+  endCall(callId: string, reason: string): void {
+    const call = this.activeCalls.get(callId);
+    if (call && call.status !== 'ended') {
+      call.status = 'ended';
+      call.lastActivity = new Date();
+      this.activeCallCount--;
+      
+      // Schedule removal after retention period
+      setTimeout(() => {
+        this.activeCalls.delete(callId);
+      }, CALL_RETENTION_TIME);
+      
+      this.events.emit('callEnded', callId, reason);
+      console.log(`📞 Call ended: ${callId}, reason: ${reason} (${this.activeCallCount}/${MAX_CONCURRENT_CALLS})`);
+    }
+  }
+
+  getActiveCallCount(): number {
+    return this.activeCallCount;
+  }
+
+  getActiveCalls(): Map<string, ActiveCall> {
+    return this.activeCalls;
+  }
+
+  canAcceptCall(): boolean {
+    return this.activeCallCount + this.semaphore < MAX_CONCURRENT_CALLS;
+  }
+
+  on(event: string, listener: (...args: any[]) => void): void {
+    this.events.on(event, listener);
+  }
+
+  private setupCleanup(): void {
+    setInterval(() => {
+      const now = new Date();
+      const staleCallIds: string[] = [];
+      
+      this.activeCalls.forEach((call, callId) => {
+        const timeSinceLastActivity = now.getTime() - call.lastActivity.getTime();
+        
+        // Clean up very old calls (beyond cleanup interval)
+        if (timeSinceLastActivity > CALL_CLEANUP_INTERVAL) {
+          staleCallIds.push(callId);
+        }
+      });
+      
+      staleCallIds.forEach(callId => {
+        const call = this.activeCalls.get(callId);
+        if (call && call.status !== 'ended') {
+          console.log(`🧹 Force ending stale call: ${callId}`);
+          this.endCall(callId, 'stale-cleanup');
+        } else {
+          this.activeCalls.delete(callId);
+          console.log(`🧹 Cleaned up old call record: ${callId}`);
+        }
+      });
+      
+    }, CALL_CLEANUP_INTERVAL);
+  }
+}
+
+// Initialize call manager
+const callManager = new CallManager();
+
+// Server metrics with better tracking
+let serverMetrics: ServerMetrics = {
+  totalCalls: 0,
+  activeCalls: 0,
+  rejectedCalls: 0,
+  errors: 0,
+  memoryUsage: process.memoryUsage(),
+  cpuUsage: 0,
+  uptime: 0
+};
+
+// Event handlers
+callManager.on('callStarted', (callId: string, twilioCallSid: string) => {
+  serverMetrics.totalCalls++;
+  serverMetrics.activeCalls = callManager.getActiveCallCount();
+});
+
+callManager.on('callEnded', (callId: string, reason: string) => {
+  serverMetrics.activeCalls = callManager.getActiveCallCount();
+});
+
+callManager.on('callError', (callId: string, error: string) => {
+  serverMetrics.errors++;
+  console.error(`❌ Call error: ${callId}, error: ${error}`);
+});
+
 // Mock data storage
 const bookings: Booking[] = [];
 const dailySpecials = {
@@ -43,7 +283,6 @@ const dailySpecials = {
   meal: "Pan-Seared Salmon with lemon herb risotto and seasonal vegetables"
 };
 
-// Restaurant opening hours
 const openingHours = {
   monday: { open: "17:00", close: "22:00", closed: false },
   tuesday: { open: "17:00", close: "22:00", closed: false },
@@ -54,11 +293,25 @@ const openingHours = {
   sunday: { open: "17:00", close: "22:00", closed: false }
 };
 
-// Human agent contact info
 const humanAgentNumber = process.env.HUMAN_AGENT_PHONE || "+1234567890";
 
-// Active calls tracking
-const activeCalls = new Map();
+// Enhanced resource monitoring (async)
+const updateMetrics = async () => {
+  try {
+    const memUsage = process.memoryUsage();
+    serverMetrics.memoryUsage = memUsage;
+    serverMetrics.uptime = process.uptime();
+    
+    // Log resource usage periodically
+    const memMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+    const memPercent = Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100);
+    console.log(`📊 Resources - Memory: ${memMB}MB (${memPercent}%), Active Calls: ${serverMetrics.activeCalls}`);
+  } catch (error) {
+    console.error('Error updating metrics:', error);
+  }
+};
+
+setInterval(updateMetrics, 300000); // 5 minutes
 
 // Utility functions
 function generateAvailableSlots(date: string): BookingSlot[] {
@@ -85,7 +338,7 @@ function isRestaurantOpen(): { isOpen: boolean; nextOpenTime?: string; message: 
   try {
     const now = new Date();
     const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase() as keyof typeof openingHours;
-    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
+    const currentTime = now.toTimeString().slice(0, 5);
 
     const todayHours = openingHours[currentDay];
 
@@ -132,6 +385,18 @@ function formatTime(time: string): string {
   return minute === '00' ? `${displayHour} ${ampm}` : `${displayHour}:${minute} ${ampm}`;
 }
 
+// Error handling helper
+const handleValidationErrors = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ 
+      error: 'Validation failed', 
+      details: errors.array() 
+    });
+  }
+  next();
+};
+
 // Ultravox utility functions
 async function createUltravoxCall(callConfig: any) {
   try {
@@ -146,7 +411,7 @@ async function createUltravoxCall(callConfig: any) {
 
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(`Ultravox API error: ${error}`);
+      throw new Error(`Ultravox API error: ${response.status} - ${error}`);
     }
 
     return await response.json();
@@ -158,7 +423,9 @@ async function createUltravoxCall(callConfig: any) {
 
 async function transferActiveCall(ultravoxCallId: string) {
   try {
+    const activeCalls = callManager.getActiveCalls();
     const callData = activeCalls.get(ultravoxCallId);
+    
     if (!callData || !callData.twilioCallSid) {
       throw new Error('Call not found or invalid CallSid');
     }
@@ -173,10 +440,10 @@ async function transferActiveCall(ultravoxCallId: string) {
     }
 
     const twiml = new twilio.twiml.VoiceResponse();
-    twiml.say({ voice: 'Polly.Aria-Neural' }, message);
+    twiml.say({ voice: TWILIO_VOICE }, message);
     const dial = twiml.dial({ timeout: 30 });
     dial.number(humanAgentNumber);
-    twiml.say({ voice: 'Polly.Aria-Neural' },
+    twiml.say({ voice: TWILIO_VOICE },
       "I'm sorry, but I wasn't able to connect you with our booking team right now. Please try calling back during our regular business hours. Thank you for calling Bella Vista!");
 
     const updatedCall = await twilioClient.calls(callData.twilioCallSid)
@@ -201,7 +468,7 @@ async function transferActiveCall(ultravoxCallId: string) {
   }
 }
 
-// Tool definitions
+// Tool definitions (unchanged from original)
 const toolsBaseUrl = process.env.BASE_URL || 'http://localhost:3000';
 
 const tools = [
@@ -360,218 +627,37 @@ const tools = [
   }
 ];
 
-// Tool endpoints
-app.post('/tools/check-availability', (req, res) => {
-  // Set header FIRST - before any logic
-  res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
+// Enhanced webhook handler with atomic concurrency control
+app.post('/webhook/twilio', validateWebhookInput, handleValidationErrors, async (req, res) => {
+  let reservedSlot = false;
   
-  try {
-    console.log('Checking availability endpoint called with:', req.body);
-    
-    const { date, partySize = 1 } = req.body;
-
-    if (!date) {
-      return res.status(400).json({ error: "Date is required" });
-    }
-
-    let searchDate = date;
-    const today = new Date();
-
-    if (date.toLowerCase() === 'today') {
-      searchDate = today.toISOString().split('T')[0];
-    } else if (date.toLowerCase() === 'tomorrow') {
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      searchDate = tomorrow.toISOString().split('T')[0];
-    }
-
-    const availableSlots = generateAvailableSlots(searchDate)
-      .filter(slot => slot.available && slot.maxPartySize >= partySize);
-
-    if (availableSlots.length === 0) {
-      console.log(`No availability found for ${partySize} people on ${searchDate}`);
-      return res.json({
-        success: false,
-        message: `Unfortunately, we don't have any availability for ${partySize} ${partySize === 1 ? 'person' : 'people'} on ${searchDate}. Would you like to try a different date?`,
-        availableSlots: []
-      });
-    } else {
-      console.log(`Found ${availableSlots.length} available slots for ${partySize} people on ${searchDate}`);
-      return res.json({
-        success: true,
-        message: `Great! I found ${availableSlots.length} available ${availableSlots.length === 1 ? 'time' : 'times'} for ${partySize} ${partySize === 1 ? 'person' : 'people'} on ${searchDate}.`,
-        date: searchDate,
-        partySize,
-        availableSlots: availableSlots.map(slot => ({
-          time: slot.time,
-          maxPartySize: slot.maxPartySize
-        }))
-      });
-    }
-  } catch (error) {
-    console.error('Error checking availability:', error);
-    return res.status(500).json({ error: "Sorry, I'm having trouble checking availability right now. Please try again." });
-  }
-});
-
-app.post('/tools/make-reservation', (req, res) => {
-  // Set header FIRST
-  res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
-  
-  try {
-    console.log('Make reservation endpoint called with:', req.body);
-    
-    const { customerName, date, time, partySize, specialRequirements } = req.body;
-
-    if (!customerName || !date || !time || !partySize) {
-      return res.status(400).json({
-        error: "Customer name, date, time, and party size are all required to make a reservation."
-      });
-    }
-
-    if (partySize > 12) {
-      return res.json({
-        success: false,
-        message: "I'm sorry, but we can only accommodate parties of up to twelve people through our booking system. For larger parties, I'd recommend calling us directly at (555) 123-4567 to speak with our manager about special arrangements."
-      });
-    }
-
-    if (partySize < 1) {
-      return res.json({
-        success: false,
-        message: "The party size must be at least one person."
-      });
-    }
-
-    const availableSlots = generateAvailableSlots(date);
-    const requestedSlot = availableSlots.find(slot => slot.time === time);
-
-    if (!requestedSlot || !requestedSlot.available || requestedSlot.maxPartySize < partySize) {
-      return res.json({
-        success: false,
-        message: `I'm sorry, but that time slot is no longer available. Let me check what other times we have available for ${date}.`
-      });
-    }
-
-    const booking: Booking = {
-      id: `BV${Date.now()}`,
-      customerName,
-      date,
-      time,
-      partySize,
-      specialRequirements,
-      createdAt: new Date()
-    };
-
-    bookings.push(booking);
-
-    const confirmationMessage = `Perfect! I've confirmed your reservation for ${customerName}, party of ${partySize}, on ${date} at ${time}. Your confirmation number is ${booking.id}.${specialRequirements ? ` We've noted your special requirements: ${specialRequirements}.` : ''} We look forward to seeing you at Bella Vista Italian Restaurant!`;
-
-    console.log(`Reservation created successfully: ${booking.id}`);
-    
-    return res.json({
-      success: true,
-      message: confirmationMessage,
-      booking: {
-        confirmationNumber: booking.id,
-        customerName: booking.customerName,
-        date: booking.date,
-        time: booking.time,
-        partySize: booking.partySize,
-        specialRequirements: booking.specialRequirements
-      }
-    });
-  } catch (error) {
-    console.error('Error making reservation:', error);
-    return res.status(500).json({
-      error: "I apologize, but I'm having trouble processing your reservation right now. Please try again in a moment."
-    });
-  }
-});
-
-app.get('/tools/daily-specials', (req, res) => {
-  // Set header FIRST
-  res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
-  
-  try {
-    console.log('Daily specials endpoint called');
-    
-    return res.json({
-      success: true,
-      message: `Today's specials are: For soup, we have ${dailySpecials.soup}. And our chef's special meal is ${dailySpecials.meal}.`,
-      specials: dailySpecials
-    });
-  } catch (error) {
-    console.error('Error getting daily specials:', error);
-    return res.status(500).json({
-      error: "I'm sorry, I can't access today's specials right now. Please ask your server when you arrive."
-    });
-  }
-});
-
-app.get('/tools/opening-hours', (req, res) => {
-  // Set header FIRST
-  res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
-  
-  try {
-    console.log('Opening hours endpoint called');
-    
-    const openStatus = isRestaurantOpen();
-
-    return res.json({
-      success: true,
-      isOpen: openStatus.isOpen,
-      message: openStatus.message,
-      hours: {
-        "Monday through Thursday": "5:00 PM to 10:00 PM",
-        "Friday and Saturday": "5:00 PM to 11:00 PM",
-        "Sunday": "5:00 PM to 10:00 PM"
-      }
-    });
-  } catch (error) {
-    console.error('Error checking opening hours:', error);
-    return res.status(500).json({
-      error: "I'm having trouble checking our hours right now."
-    });
-  }
-});
-
-app.post('/tools/transfer-call', async (req, res) => {
-  try {
-    const { callId, reason, customerName, summary } = req.body;
-    console.log(`Request to transfer call with callId: ${callId}`);
-    console.log(`Transfer reason: ${reason}`);
-
-    if (!callId) {
-      return res.status(400).json({ error: "Call ID is required for transfer" });
-    }
-
-    const result = await transferActiveCall(callId);
-    return res.json(result);
-
-  } catch (error) {
-    console.error('Error transferring call:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return res.status(500).json({
-      status: 'error',
-      message: 'Failed to transfer call',
-      error: errorMessage
-    });
-  }
-});
-
-// Twilio webhook handler
-app.post('/webhook/twilio', async (req, res) => {
   try {
     console.log('Incoming call received');
     const twilioCallSid = req.body.CallSid;
     console.log('Twilio CallSid:', twilioCallSid);
 
+    // Atomic reservation of call slot
+    reservedSlot = callManager.reserveCallSlot();
+    
+    if (!reservedSlot) {
+      console.log(`🚫 Call rejected - at capacity (${callManager.getActiveCallCount()}/${MAX_CONCURRENT_CALLS})`);
+      serverMetrics.rejectedCalls++;
+      
+      const twiml = new twilio.twiml.VoiceResponse();
+      twiml.say({ 
+        voice: TWILIO_VOICE 
+      }, `Thank you for calling Bella Vista Italian Restaurant. We're currently experiencing high call volume and all our lines are busy. Please try calling back in a few minutes, or visit our website to make a reservation online. We apologize for the inconvenience and look forward to serving you soon.`);
+      
+      const twimlString = twiml.toString();
+      res.type('text/xml');
+      return res.send(twimlString);
+    }
+
     const callConfig = {
-      systemPrompt: `You are Sofia, a friendly and professional AI host for Bella Vista Italian Restaurant. You help customers make reservations and answer questions about our menu.
+      systemPrompt: `You are ${AGENT_NAME}, a friendly and professional AI host for Bella Vista Italian Restaurant. You help customers make reservations and answer questions about our menu.
 
 IMPORTANT GUIDELINES:
-- Always greet customers warmly and introduce yourself as Sofia, the AI Voice Agent for Bella Vista
+- Always greet customers warmly and introduce yourself as ${AGENT_NAME}, the AI Voice Agent for Bella Vista
 - Explain that we use AI agents because our lines get very busy during serving hours while our staff focuses on providing excellent service to dining guests
 - Mention that calls are recorded to help improve our service quality
 - Get the customer's name early and use it throughout the conversation
@@ -623,7 +709,7 @@ TOOLS AVAILABLE:
 
 Always speak naturally and conversationally, use the customer's name, confirm all booking details clearly, and provide excellent hospitality that reflects our restaurant's values.`,
       model: 'fixie-ai/ultravox',
-      voice: 'Steve-English-Australian',
+      voice: ULTRAVOX_VOICE,
       temperature: 0.3,
       firstSpeaker: 'FIRST_SPEAKER_AGENT',
       selectedTools: [
@@ -658,16 +744,16 @@ Always speak naturally and conversationally, use the customer's name, confirm al
 
     const response = await createUltravoxCall(callConfig);
 
-    activeCalls.set(response.callId, {
-      twilioCallSid: twilioCallSid,
-      timestamp: new Date().toISOString()
-    });
+    // Register the successful call (converts reservation to active call)
+    callManager.registerCall(response.callId, twilioCallSid);
 
     const twiml = new twilio.twiml.VoiceResponse();
     const connect = twiml.connect();
     connect.stream({
       url: response.joinUrl,
-      name: 'bella-vista-agent'
+      name: 'bella-vista-agent',
+      statusCallback: `${toolsBaseUrl}/webhook/stream-status`,
+      statusCallbackMethod: 'POST'
     });
 
     const twimlString = twiml.toString();
@@ -676,37 +762,380 @@ Always speak naturally and conversationally, use the customer's name, confirm al
 
   } catch (error) {
     console.error('Error handling incoming call:', error);
+    
+    // Release reserved slot if call creation failed
+    if (reservedSlot) {
+      callManager.releaseCallSlot();
+    }
+    
+    serverMetrics.errors++;
+    
     const twiml = new twilio.twiml.VoiceResponse();
-    twiml.say('Sorry, there was an error connecting your call. Please try again or call us directly.');
+    twiml.say({ voice: TWILIO_VOICE }, 'Sorry, there was an error connecting your call. Please try again or call us directly.');
     const twimlString = twiml.toString();
     res.type('text/xml');
     return res.send(twimlString);
   }
 });
 
-// Admin endpoints
-app.get('/bookings', (req, res) => {
-  return res.json({ bookings });
+// Enhanced tool endpoints with validation
+app.post('/tools/check-availability', [
+  body('date').isString().notEmpty(),
+  body('partySize').isInt({ min: 1, max: 12 })
+], handleValidationErrors, (req, res) => {
+  res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
+  
+  try {
+    console.log('Checking availability endpoint called with:', req.body);
+    
+    const { date, partySize = 1 } = req.body;
+
+    let searchDate = date;
+    const today = new Date();
+
+    if (date.toLowerCase() === 'today') {
+      searchDate = today.toISOString().split('T')[0];
+    } else if (date.toLowerCase() === 'tomorrow') {
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      searchDate = tomorrow.toISOString().split('T')[0];
+    }
+
+    const availableSlots = generateAvailableSlots(searchDate)
+      .filter(slot => slot.available && slot.maxPartySize >= partySize);
+
+    if (availableSlots.length === 0) {
+      console.log(`No availability found for ${partySize} people on ${searchDate}`);
+      return res.json({
+        success: false,
+        message: `Unfortunately, we don't have any availability for ${partySize} ${partySize === 1 ? 'person' : 'people'} on ${searchDate}. Would you like to try a different date?`,
+        availableSlots: []
+      });
+    } else {
+      console.log(`Found ${availableSlots.length} available slots for ${partySize} people on ${searchDate}`);
+      return res.json({
+        success: true,
+        message: `Great! I found ${availableSlots.length} available ${availableSlots.length === 1 ? 'time' : 'times'} for ${partySize} ${partySize === 1 ? 'person' : 'people'} on ${searchDate}.`,
+        date: searchDate,
+        partySize,
+        availableSlots: availableSlots.map(slot => ({
+          time: slot.time,
+          maxPartySize: slot.maxPartySize
+        }))
+      });
+    }
+  } catch (error) {
+    console.error('Error checking availability:', error);
+    return res.status(500).json({ error: "Sorry, I'm having trouble checking availability right now. Please try again." });
+  }
 });
 
-app.get('/active-calls', (req, res) => {
+app.post('/tools/make-reservation', validateReservationInput, handleValidationErrors, (req, res) => {
+  res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
+  
+  try {
+    console.log('Make reservation endpoint called with:', req.body);
+    
+    const { customerName, date, time, partySize, specialRequirements } = req.body;
+
+    if (partySize > 12) {
+      return res.json({
+        success: false,
+        message: "I'm sorry, but we can only accommodate parties of up to twelve people through our booking system. For larger parties, I'd recommend calling us directly at (555) 123-4567 to speak with our manager about special arrangements."
+      });
+    }
+
+    if (partySize < 1) {
+      return res.json({
+        success: false,
+        message: "The party size must be at least one person."
+      });
+    }
+
+    const availableSlots = generateAvailableSlots(date);
+    const requestedSlot = availableSlots.find(slot => slot.time === time);
+
+    if (!requestedSlot || !requestedSlot.available || requestedSlot.maxPartySize < partySize) {
+      return res.json({
+        success: false,
+        message: `I'm sorry, but that time slot is no longer available. Let me check what other times we have available for ${date}.`
+      });
+    }
+
+    const booking: Booking = {
+      id: `BV${Date.now()}`,
+      customerName: customerName.trim(),
+      date,
+      time,
+      partySize,
+      specialRequirements: specialRequirements?.trim(),
+      createdAt: new Date()
+    };
+
+    bookings.push(booking);
+
+    const confirmationMessage = `Perfect! I've confirmed your reservation for ${customerName}, party of ${partySize}, on ${date} at ${time}. Your confirmation number is ${booking.id}.${specialRequirements ? ` We've noted your special requirements: ${specialRequirements}.` : ''} We look forward to seeing you at Bella Vista Italian Restaurant!`;
+
+    console.log(`Reservation created successfully: ${booking.id}`);
+    
+    return res.json({
+      success: true,
+      message: confirmationMessage,
+      booking: {
+        confirmationNumber: booking.id,
+        customerName: booking.customerName,
+        date: booking.date,
+        time: booking.time,
+        partySize: booking.partySize,
+        specialRequirements: booking.specialRequirements
+      }
+    });
+  } catch (error) {
+    console.error('Error making reservation:', error);
+    return res.status(500).json({
+      error: "I apologize, but I'm having trouble processing your reservation right now. Please try again in a moment."
+    });
+  }
+});
+
+app.get('/tools/daily-specials', (req, res) => {
+  res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
+  
+  try {
+    console.log('Daily specials endpoint called');
+    
+    return res.json({
+      success: true,
+      message: `Today's specials are: For soup, we have ${dailySpecials.soup}. And our chef's special meal is ${dailySpecials.meal}.`,
+      specials: dailySpecials
+    });
+  } catch (error) {
+    console.error('Error getting daily specials:', error);
+    return res.status(500).json({
+      error: "I'm sorry, I can't access today's specials right now. Please ask your server when you arrive."
+    });
+  }
+});
+
+app.get('/tools/opening-hours', (req, res) => {
+  res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
+  
+  try {
+    console.log('Opening hours endpoint called');
+    
+    const openStatus = isRestaurantOpen();
+
+    return res.json({
+      success: true,
+      isOpen: openStatus.isOpen,
+      message: openStatus.message,
+      hours: {
+        "Monday through Thursday": "5:00 PM to 10:00 PM",
+        "Friday and Saturday": "5:00 PM to 11:00 PM",
+        "Sunday": "5:00 PM to 10:00 PM"
+      }
+    });
+  } catch (error) {
+    console.error('Error checking opening hours:', error);
+    return res.status(500).json({
+      error: "I'm having trouble checking our hours right now."
+    });
+  }
+});
+
+app.post('/tools/transfer-call', [
+  body('callId').isString().notEmpty(),
+  body('reason').isString().notEmpty(),
+  body('customerName').optional().isString().trim(),
+  body('summary').optional().isString().isLength({ max: 1000 })
+], handleValidationErrors, async (req, res) => {
+  try {
+    const { callId, reason, customerName, summary } = req.body;
+    console.log(`Request to transfer call with callId: ${callId}`);
+    console.log(`Transfer reason: ${reason}`);
+
+    const result = await transferActiveCall(callId);
+    return res.json(result);
+
+  } catch (error) {
+    console.error('Error transferring call:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({
+      status: 'error',
+      message: 'Failed to transfer call',
+      error: errorMessage
+    });
+  }
+});
+
+// Enhanced webhook handlers
+
+// Stream status callback webhook
+app.post('/webhook/stream-status', (req, res) => {
+  try {
+    const { CallSid, StreamSid, StreamEvent, StreamError, Timestamp } = req.body;
+    
+    console.log(`📡 Stream event: ${StreamEvent} for call ${CallSid}`);
+    
+    // Find the call by Twilio CallSid
+    const activeCalls = callManager.getActiveCalls();
+    const callEntry = Array.from(activeCalls.entries())
+      .find(([_, call]) => call.twilioCallSid === CallSid);
+    
+    if (callEntry) {
+      const [callId, call] = callEntry;
+      
+      switch (StreamEvent) {
+        case 'stream-started':
+          callManager.updateCallStatus(callId, 'active');
+          console.log(`✅ Stream started for call ${callId}`);
+          break;
+          
+        case 'stream-stopped':
+          callManager.endCall(callId, 'stream-stopped');
+          break;
+          
+        case 'stream-error':
+          console.error(`❌ Stream error for call ${callId}: ${StreamError}`);
+          callManager.endCall(callId, `stream-error: ${StreamError}`);
+          break;
+      }
+    }
+    
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('Error handling stream status:', error);
+    res.status(200).send('OK'); // Always return 200 to Twilio
+  }
+});
+
+// Twilio debugger webhook for error monitoring
+app.post('/webhook/twilio-errors', (req, res) => {
+  try {
+    const { AccountSid, Sid, Level, Payload, Timestamp } = req.body;
+    
+    console.log(`🚨 Twilio ${Level}: ${Sid} at ${Timestamp}`);
+    
+    if (Payload) {
+      const payload = typeof Payload === 'string' ? JSON.parse(Payload) : Payload;
+      console.log('Error details:', payload);
+      
+      // Handle specific error types
+      if (payload.error_code === '10004') {
+        console.log('⚠️  Concurrency limit exceeded - this should be handled by our local limiting');
+        serverMetrics.rejectedCalls++;
+      }
+    }
+    
+    serverMetrics.errors++;
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('Error handling Twilio error webhook:', error);
+    res.status(200).send('OK');
+  }
+});
+
+// Enhanced admin and monitoring endpoints with authentication
+
+app.get('/bookings', authenticateAdmin, (req, res) => {
+  return res.json({ 
+    bookings,
+    total: bookings.length,
+    recent: bookings.slice(-10) // Last 10 bookings
+  });
+});
+
+app.get('/active-calls', authenticateAdmin, (req, res) => {
+  const activeCalls = callManager.getActiveCalls();
   const calls = Array.from(activeCalls.entries()).map(([ultravoxCallId, data]) => ({
     ultravoxCallId,
-    ...data
+    ...data,
+    durationMinutes: Math.round((new Date().getTime() - new Date(data.timestamp).getTime()) / 60000)
   }));
-  return res.json(calls);
+  
+  return res.json({
+    activeCalls: calls,
+    activeCount: callManager.getActiveCallCount(),
+    maxConcurrent: MAX_CONCURRENT_CALLS,
+    canAcceptCalls: callManager.canAcceptCall(),
+    utilizationPercent: Math.round((callManager.getActiveCallCount() / MAX_CONCURRENT_CALLS) * 100)
+  });
 });
 
 app.get('/health', (req, res) => {
-  return res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+  const memUsage = process.memoryUsage();
+  const healthStatus = {
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    activeCalls: callManager.getActiveCallCount(),
+    maxConcurrentCalls: MAX_CONCURRENT_CALLS,
+    canAcceptCalls: callManager.canAcceptCall(),
+    memory: {
+      used: Math.round(memUsage.heapUsed / 1024 / 1024),
+      total: Math.round(memUsage.heapTotal / 1024 / 1024),
+      percentage: Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100)
+    },
+    utilizationPercent: Math.round((callManager.getActiveCallCount() / MAX_CONCURRENT_CALLS) * 100)
+  };
+  
+  return res.json(healthStatus);
+});
+
+app.get('/metrics', authenticateAdmin, (req, res) => {
+  const currentMetrics = {
+    ...serverMetrics,
+    memoryUsage: process.memoryUsage(),
+    uptime: process.uptime(),
+    activeCalls: callManager.getActiveCallCount(),
+    utilizationPercent: Math.round((callManager.getActiveCallCount() / MAX_CONCURRENT_CALLS) * 100),
+    timestamp: new Date().toISOString()
+  };
+  
+  return res.json(currentMetrics);
+});
+
+// Configuration endpoint
+app.get('/config', authenticateAdmin, (req, res) => {
+  return res.json({
+    agentName: AGENT_NAME,
+    ultravoxVoice: ULTRAVOX_VOICE,
+    twilioVoice: TWILIO_VOICE,
+    maxConcurrentCalls: MAX_CONCURRENT_CALLS,
+    callCleanupInterval: CALL_CLEANUP_INTERVAL,
+    toolsBaseUrl: toolsBaseUrl,
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Error handling middleware
+app.use((error: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Unhandled error:', error);
+  serverMetrics.errors++;
+  
+  if (!res.headersSent) {
+    res.status(500).json({
+      error: 'Internal server error',
+      message: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
+    });
+  }
 });
 
 // Start server
 app.listen(port, () => {
   console.log(`🍝 Restaurant booking server running on port ${port}`);
   console.log(`📞 Webhook endpoint: http://localhost:${port}/webhook/twilio`);
+  console.log(`📡 Stream status: http://localhost:${port}/webhook/stream-status`);
+  console.log(`🚨 Error webhook: http://localhost:${port}/webhook/twilio-errors`);
   console.log(`🏥 Health check: http://localhost:${port}/health`);
-  console.log(`📊 Active calls: http://localhost:${port}/active-calls`);
+  console.log(`📊 Active calls: http://localhost:${port}/active-calls (requires API key)`);
+  console.log(`📈 Metrics: http://localhost:${port}/metrics (requires API key)`);
+  console.log(`⚙️  Configuration: http://localhost:${port}/config (requires API key)`);
+  console.log(`👤 Agent: ${AGENT_NAME}`);
+  console.log(`🗣️  Ultravox Voice: ${ULTRAVOX_VOICE}`);
+  console.log(`📞 Twilio Voice: ${TWILIO_VOICE}`);
+  console.log(`🔢 Max Concurrent Calls: ${MAX_CONCURRENT_CALLS}`);
+  console.log(`🔐 Admin endpoints require X-API-Key header`);
 
   if (!process.env.ULTRAVOX_API_KEY) {
     console.warn('⚠️  ULTRAVOX_API_KEY environment variable not set!');
@@ -714,6 +1143,14 @@ app.listen(port, () => {
 
   if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
     console.warn('⚠️  Twilio credentials not set!');
+  }
+  
+  if (!process.env.ULTRAVOX_CORPUS_ID) {
+    console.warn('⚠️  ULTRAVOX_CORPUS_ID environment variable not set!');
+  }
+
+  if (ADMIN_API_KEY === 'your-secure-admin-key') {
+    console.warn('⚠️  Please set ADMIN_API_KEY environment variable for production!');
   }
 });
 
