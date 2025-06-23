@@ -64,10 +64,10 @@ const activeCalls = new Map();
 function generateAvailableSlots(date: string): BookingSlot[] {
   const slots: BookingSlot[] = [];
   const times = [
-    "5:00 PM", "5:30 PM", "6:00 PM", "6:30 PM", "7:00 PM", 
+    "5:00 PM", "5:30 PM", "6:00 PM", "6:30 PM", "7:00 PM",
     "7:30 PM", "8:00 PM", "8:30 PM", "9:00 PM", "9:30 PM"
   ];
-  
+
   times.forEach(time => {
     const isAvailable = Math.random() > 0.3;
     slots.push({
@@ -77,27 +77,27 @@ function generateAvailableSlots(date: string): BookingSlot[] {
       maxPartySize: isAvailable ? (Math.random() > 0.5 ? 8 : 6) : 0
     });
   });
-  
+
   return slots;
 }
 
 function isRestaurantOpen(): { isOpen: boolean; nextOpenTime?: string; message: string } {
   try {
     const now = new Date();
-    const currentDay = now.toLocaleDateString('en-US', { weekday: 'lowercase' }) as keyof typeof openingHours;
+    const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase() as keyof typeof openingHours;
     const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
-    
+
     const todayHours = openingHours[currentDay];
-    
+
     if (todayHours.closed) {
       return {
         isOpen: false,
         message: `We're closed today (${currentDay}). Our regular hours are Monday through Sunday, five PM to ten PM (eleven PM on weekends).`
       };
     }
-    
+
     const isOpen = currentTime >= todayHours.open && currentTime <= todayHours.close;
-    
+
     if (isOpen) {
       return {
         isOpen: true,
@@ -165,7 +165,7 @@ async function transferActiveCall(ultravoxCallId: string) {
 
     const openStatus = isRestaurantOpen();
     let message: string;
-    
+
     if (openStatus.isOpen) {
       message = "I'm connecting you with our booking team. Please note that during busy serving hours, there may be a brief wait as our staff is focused on providing excellent service to our dining guests.";
     } else {
@@ -176,7 +176,7 @@ async function transferActiveCall(ultravoxCallId: string) {
     twiml.say({ voice: 'Polly.Joanna' }, message);
     const dial = twiml.dial({ timeout: 30 });
     dial.number(humanAgentNumber);
-    twiml.say({ voice: 'Polly.Joanna' }, 
+    twiml.say({ voice: 'Polly.Joanna' },
       "I'm sorry, but I wasn't able to connect you with our booking team right now. Please try calling back during our regular business hours. Thank you for calling Bella Vista!");
 
     const updatedCall = await twilioClient.calls(callData.twilioCallSid)
@@ -192,10 +192,12 @@ async function transferActiveCall(ultravoxCallId: string) {
 
   } catch (error) {
     console.error('Error transferring call:', error);
+    // Fix: Type assertion for error
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     throw {
       status: 'error',
       message: 'Failed to transfer call',
-      error: error.message
+      error: errorMessage
     };
   }
 }
@@ -219,7 +221,7 @@ const tools = [
       },
       {
         name: "partySize",
-        location: "PARAMETER_LOCATION_BODY", 
+        location: "PARAMETER_LOCATION_BODY",
         schema: {
           type: "number",
           description: "Number of people in the party",
@@ -251,7 +253,7 @@ const tools = [
         name: "date",
         location: "PARAMETER_LOCATION_BODY",
         schema: {
-          type: "string", 
+          type: "string",
           description: "Date for the reservation in YYYY-MM-DD format"
         },
         required: true
@@ -314,7 +316,7 @@ const tools = [
     description: "Transfer the call to a human booking agent when requested by the customer",
     automaticParameters: [
       {
-        name: "callId", 
+        name: "callId",
         location: "PARAMETER_LOCATION_BODY",
         knownValue: "KNOWN_PARAM_CALL_ID"
       }
@@ -359,14 +361,14 @@ const tools = [
 app.post('/tools/check-availability', (req, res) => {
   try {
     const { date, partySize = 1 } = req.body;
-    
+
     if (!date) {
       return res.status(400).json({ error: "Date is required" });
     }
 
     let searchDate = date;
     const today = new Date();
-    
+
     if (date.toLowerCase() === 'today') {
       searchDate = today.toISOString().split('T')[0];
     } else if (date.toLowerCase() === 'tomorrow') {
@@ -378,14 +380,17 @@ app.post('/tools/check-availability', (req, res) => {
     const availableSlots = generateAvailableSlots(searchDate)
       .filter(slot => slot.available && slot.maxPartySize >= partySize);
 
+    // Set header BEFORE res.json()
+    res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
+
     if (availableSlots.length === 0) {
-      res.json({
+      return res.json({
         success: false,
         message: `Unfortunately, we don't have any availability for ${partySize} ${partySize === 1 ? 'person' : 'people'} on ${searchDate}. Would you like to try a different date?`,
         availableSlots: []
       });
     } else {
-      res.json({
+      return res.json({
         success: true,
         message: `Great! I found ${availableSlots.length} available ${availableSlots.length === 1 ? 'time' : 'times'} for ${partySize} ${partySize === 1 ? 'person' : 'people'} on ${searchDate}.`,
         date: searchDate,
@@ -396,21 +401,19 @@ app.post('/tools/check-availability', (req, res) => {
         }))
       });
     }
-
-    res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
   } catch (error) {
     console.error('Error checking availability:', error);
-    res.status(500).json({ error: "Sorry, I'm having trouble checking availability right now. Please try again." });
+    return res.status(500).json({ error: "Sorry, I'm having trouble checking availability right now. Please try again." });
   }
 });
 
 app.post('/tools/make-reservation', (req, res) => {
   try {
     const { customerName, date, time, partySize, specialRequirements } = req.body;
-    
+
     if (!customerName || !date || !time || !partySize) {
-      return res.status(400).json({ 
-        error: "Customer name, date, time, and party size are all required to make a reservation." 
+      return res.status(400).json({
+        error: "Customer name, date, time, and party size are all required to make a reservation."
       });
     }
 
@@ -430,7 +433,7 @@ app.post('/tools/make-reservation', (req, res) => {
 
     const availableSlots = generateAvailableSlots(date);
     const requestedSlot = availableSlots.find(slot => slot.time === time);
-    
+
     if (!requestedSlot || !requestedSlot.available || requestedSlot.maxPartySize < partySize) {
       return res.json({
         success: false,
@@ -452,7 +455,10 @@ app.post('/tools/make-reservation', (req, res) => {
 
     const confirmationMessage = `Perfect! I've confirmed your reservation for ${customerName}, party of ${partySize}, on ${date} at ${time}. Your confirmation number is ${booking.id}.${specialRequirements ? ` We've noted your special requirements: ${specialRequirements}.` : ''} We look forward to seeing you at Bella Vista Italian Restaurant!`;
 
-    res.json({
+    // Set header BEFORE res.json()
+    res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
+
+    return res.json({
       success: true,
       message: confirmationMessage,
       booking: {
@@ -464,29 +470,28 @@ app.post('/tools/make-reservation', (req, res) => {
         specialRequirements: booking.specialRequirements
       }
     });
-
-    res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
   } catch (error) {
     console.error('Error making reservation:', error);
-    res.status(500).json({ 
-      error: "I apologize, but I'm having trouble processing your reservation right now. Please try again in a moment." 
+    return res.status(500).json({
+      error: "I apologize, but I'm having trouble processing your reservation right now. Please try again in a moment."
     });
   }
 });
 
 app.get('/tools/daily-specials', (req, res) => {
   try {
-    res.json({
+    // Set header BEFORE res.json()
+    res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
+
+    return res.json({
       success: true,
       message: `Today's specials are: For soup, we have ${dailySpecials.soup}. And our chef's special meal is ${dailySpecials.meal}.`,
       specials: dailySpecials
     });
-
-    res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
   } catch (error) {
     console.error('Error getting daily specials:', error);
-    res.status(500).json({ 
-      error: "I'm sorry, I can't access today's specials right now. Please ask your server when you arrive." 
+    return res.status(500).json({
+      error: "I'm sorry, I can't access today's specials right now. Please ask your server when you arrive."
     });
   }
 });
@@ -494,23 +499,24 @@ app.get('/tools/daily-specials', (req, res) => {
 app.get('/tools/opening-hours', (req, res) => {
   try {
     const openStatus = isRestaurantOpen();
-    
-    res.json({
+
+    // Set header BEFORE res.json()
+    res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
+
+    return res.json({
       success: true,
       isOpen: openStatus.isOpen,
       message: openStatus.message,
       hours: {
         "Monday through Thursday": "5:00 PM to 10:00 PM",
-        "Friday and Saturday": "5:00 PM to 11:00 PM", 
+        "Friday and Saturday": "5:00 PM to 11:00 PM",
         "Sunday": "5:00 PM to 10:00 PM"
       }
     });
-
-    res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
   } catch (error) {
     console.error('Error checking opening hours:', error);
-    res.status(500).json({ 
-      error: "I'm having trouble checking our hours right now." 
+    return res.status(500).json({
+      error: "I'm having trouble checking our hours right now."
     });
   }
 });
@@ -520,20 +526,22 @@ app.post('/tools/transfer-call', async (req, res) => {
     const { callId, reason, customerName, summary } = req.body;
     console.log(`Request to transfer call with callId: ${callId}`);
     console.log(`Transfer reason: ${reason}`);
-    
+
     if (!callId) {
       return res.status(400).json({ error: "Call ID is required for transfer" });
     }
 
     const result = await transferActiveCall(callId);
-    res.json(result);
-    
+    return res.json(result);
+
   } catch (error) {
     console.error('Error transferring call:', error);
-    res.status(500).json({
+    // Fix: Type assertion for error
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({
       status: 'error',
       message: 'Failed to transfer call',
-      error: error.message
+      error: errorMessage
     });
   }
 });
@@ -544,7 +552,7 @@ app.post('/webhook/twilio', async (req, res) => {
     console.log('Incoming call received');
     const twilioCallSid = req.body.CallSid;
     console.log('Twilio CallSid:', twilioCallSid);
-    
+
     const callConfig = {
       systemPrompt: `You are Sofia, a friendly and professional AI host for Bella Vista Italian Restaurant. You help customers make reservations and answer questions about our menu.
 
@@ -559,7 +567,7 @@ IMPORTANT GUIDELINES:
 
 CONVERSATION FLOW:
 1. Warm greeting and AI agent introduction with explanation
-2. Mention call recording for service improvement  
+2. Mention call recording for service improvement
 3. Get customer's name and greet them personally
 4. Ask how you can help them today
 5. For bookings: gather date, time preference, party size
@@ -591,8 +599,8 @@ Always speak naturally and conversationally, use the customer's name, confirm al
       temperature: 0.3,
       firstSpeaker: 'FIRST_SPEAKER_AGENT',
       selectedTools: [
-        { 
-          toolName: "queryCorpus", 
+        {
+          toolName: "queryCorpus",
           authTokens: {},
           parameterOverrides: {
             corpusId: process.env.ULTRAVOX_CORPUS_ID || "your_corpus_id_here"
@@ -608,7 +616,7 @@ Always speak naturally and conversationally, use the customer's name, confirm al
           message: "Are you still there? I'm here to help with your reservation."
         },
         {
-          duration: "15s", 
+          duration: "15s",
           message: "If there's nothing else I can help you with, I'll end our call."
         },
         {
@@ -635,20 +643,21 @@ Always speak naturally and conversationally, use the customer's name, confirm al
 
     const twimlString = twiml.toString();
     res.type('text/xml');
-    res.send(twimlString);
+    return res.send(twimlString);
 
   } catch (error) {
     console.error('Error handling incoming call:', error);
     const twiml = new twilio.twiml.VoiceResponse();
     twiml.say('Sorry, there was an error connecting your call. Please try again or call us directly.');
+    const twimlString = twiml.toString();
     res.type('text/xml');
-    res.send(twiml.toString());
+    return res.send(twimlString);
   }
 });
 
 // Admin endpoints
 app.get('/bookings', (req, res) => {
-  res.json({ bookings });
+  return res.json({ bookings });
 });
 
 app.get('/active-calls', (req, res) => {
@@ -656,11 +665,11 @@ app.get('/active-calls', (req, res) => {
     ultravoxCallId,
     ...data
   }));
-  res.json(calls);
+  return res.json(calls);
 });
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+  return res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
 // Start server
@@ -669,11 +678,11 @@ app.listen(port, () => {
   console.log(`📞 Webhook endpoint: http://localhost:${port}/webhook/twilio`);
   console.log(`🏥 Health check: http://localhost:${port}/health`);
   console.log(`📊 Active calls: http://localhost:${port}/active-calls`);
-  
+
   if (!process.env.ULTRAVOX_API_KEY) {
     console.warn('⚠️  ULTRAVOX_API_KEY environment variable not set!');
   }
-  
+
   if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
     console.warn('⚠️  Twilio credentials not set!');
   }
