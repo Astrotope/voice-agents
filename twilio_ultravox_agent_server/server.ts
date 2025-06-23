@@ -1141,7 +1141,7 @@ app.listen(port, () => {
   console.log(`📈 Metrics: http://localhost:${port}/metrics (requires API key)`);
   console.log(`⚙️  Configuration: http://localhost:${port}/config (requires API key)`);
   console.log(`👤 Agent: ${AGENT_NAME}`);
-  console.log(`🗣️  Ultravox Voice: ${ULTRAVOX_VOICE}`);
+  console.log(`🗣️ Ultravox Voice: ${ULTRAVOX_VOICE}`);
   console.log(`📞 Twilio Voice: ${TWILIO_VOICE}`);
   console.log(`🔢 Max Concurrent Calls: ${MAX_CONCURRENT_CALLS}`);
   console.log(`🔐 Admin endpoints require X-API-Key header`);
