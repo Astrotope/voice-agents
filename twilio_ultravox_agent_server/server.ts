@@ -47,10 +47,11 @@ const validateReservationInput = [
 ];
 
 // Authentication middleware for admin endpoints
-const authenticateAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const authenticateAdmin = (req: express.Request, res: express.Response, next: express.NextFunction): void => {
   const apiKey = req.headers['x-api-key'] || req.query.apiKey;
   if (apiKey !== ADMIN_API_KEY) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
   }
   next();
 };
@@ -386,13 +387,14 @@ function formatTime(time: string): string {
 }
 
 // Error handling helper
-const handleValidationErrors = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const handleValidationErrors = (req: express.Request, res: express.Response, next: express.NextFunction): void => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ 
+    res.status(400).json({ 
       error: 'Validation failed', 
       details: errors.array() 
     });
+    return;
   }
   next();
 };
@@ -440,10 +442,10 @@ async function transferActiveCall(ultravoxCallId: string) {
     }
 
     const twiml = new twilio.twiml.VoiceResponse();
-    twiml.say({ voice: TWILIO_VOICE }, message);
+    twiml.say({ voice: TWILIO_VOICE as any }, message);
     const dial = twiml.dial({ timeout: 30 });
     dial.number(humanAgentNumber);
-    twiml.say({ voice: TWILIO_VOICE },
+    twiml.say({ voice: TWILIO_VOICE as any },
       "I'm sorry, but I wasn't able to connect you with our booking team right now. Please try calling back during our regular business hours. Thank you for calling Bella Vista!");
 
     const updatedCall = await twilioClient.calls(callData.twilioCallSid)
@@ -645,7 +647,7 @@ app.post('/webhook/twilio', validateWebhookInput, handleValidationErrors, async 
       
       const twiml = new twilio.twiml.VoiceResponse();
       twiml.say({ 
-        voice: TWILIO_VOICE 
+        voice: TWILIO_VOICE as any 
       }, `Thank you for calling Bella Vista Italian Restaurant. We're currently experiencing high call volume and all our lines are busy. Please try calling back in a few minutes, or visit our website to make a reservation online. We apologize for the inconvenience and look forward to serving you soon.`);
       
       const twimlString = twiml.toString();
@@ -771,7 +773,7 @@ Always speak naturally and conversationally, use the customer's name, confirm al
     serverMetrics.errors++;
     
     const twiml = new twilio.twiml.VoiceResponse();
-    twiml.say({ voice: TWILIO_VOICE }, 'Sorry, there was an error connecting your call. Please try again or call us directly.');
+    twiml.say({ voice: TWILIO_VOICE as any }, 'Sorry, there was an error connecting your call. Please try again or call us directly.');
     const twimlString = twiml.toString();
     res.type('text/xml');
     return res.send(twimlString);
@@ -1109,7 +1111,7 @@ app.get('/config', authenticateAdmin, (req, res) => {
 });
 
 // Error handling middleware
-app.use((error: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((error: Error, req: express.Request, res: express.Response, next: express.NextFunction): void => {
   console.error('Unhandled error:', error);
   serverMetrics.errors++;
   
