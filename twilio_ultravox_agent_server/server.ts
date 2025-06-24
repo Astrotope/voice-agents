@@ -350,6 +350,37 @@ function convertToPhonetic(bookingId: string): string {
   return bookingId.split('').map(letter => phoneticAlphabet[letter] || letter).join(' ');
 }
 
+// Convert phonetic alphabet back to letters
+function convertPhoneticToLetters(phoneticInput: string): string {
+  const reversePhoneticMap: { [key: string]: string } = {};
+  
+  // Create reverse mapping from phonetic words to letters
+  Object.entries(phoneticAlphabet).forEach(([letter, phonetic]) => {
+    reversePhoneticMap[phonetic.toLowerCase()] = letter;
+  });
+  
+  // Handle different input formats
+  const normalizedInput = phoneticInput.trim().toLowerCase();
+  
+  // If it's already a 3-letter code, return uppercase
+  if (/^[a-z]{3}$/.test(normalizedInput)) {
+    return normalizedInput.toUpperCase();
+  }
+  
+  // Parse phonetic words (space-separated or dash-separated)
+  const words = normalizedInput.split(/[\s\-]+/).filter(word => word.length > 0);
+  
+  if (words.length === 3) {
+    const letters = words.map(word => reversePhoneticMap[word]).filter(Boolean);
+    if (letters.length === 3) {
+      return letters.join('');
+    }
+  }
+  
+  // If we can't parse it, return the original input (uppercase, no spaces)
+  return phoneticInput.toUpperCase().replace(/\s+/g, '');
+}
+
 // Date validation and conversion utilities
 function parseNaturalDate(dateInput: string): string {
   const today = new Date();
@@ -1165,7 +1196,7 @@ app.post('/tools/make-reservation', validateReservationInput, handleValidationEr
 
 // ADDED: New check booking endpoint
 app.post('/tools/check-booking', [
-  body('confirmationCode').isString().trim().isLength({ min: 1, max: 10 })
+  body('confirmationCode').isString().trim().isLength({ min: 1, max: 50 }) // FIXED: Allow longer phonetic codes
 ], handleValidationErrors, (req, res) => {
   // Set header FIRST
   res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
@@ -1181,11 +1212,11 @@ app.post('/tools/check-booking', [
   try {
     const { confirmationCode } = req.body;
     
-    // Normalize the confirmation code (uppercase, remove spaces)
-    const normalizedCode = confirmationCode.toUpperCase().replace(/\s+/g, '');
+    // FIXED: Convert phonetic input to letters first
+    const normalizedCode = convertPhoneticToLetters(confirmationCode);
     
     if (DEBUG_TOOLS) {
-      console.log(`🔧 Looking for booking with code: ${normalizedCode}`);
+      console.log(`🔧 Looking for booking with code: ${confirmationCode} -> ${normalizedCode}`);
       console.log(`🔧 Available bookings:`, bookings.map(b => b.id));
     }
     
