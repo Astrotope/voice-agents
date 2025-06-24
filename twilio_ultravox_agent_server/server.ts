@@ -1139,17 +1139,34 @@ app.post('/tools/make-reservation', validateReservationInput, handleValidationEr
       return res.json(response);
     }
 
+    // FIXED: Check real availability based on actual bookings
     const availableSlots = generateAvailableSlots(parsedDate);
     const requestedSlot = availableSlots.find(slot => slot.time === time);
 
-    if (!requestedSlot || !requestedSlot.available || requestedSlot.maxPartySize < partySize) {
+    // Check if the specific time slot can accommodate the party size
+    if (!requestedSlot) {
+      // Time slot is fully booked
       const response = {
         success: false,
-        message: `I'm sorry, but that time slot is no longer available. Let me check what other times we have available for ${parsedDate}.`
+        message: `I'm sorry, but ${time} on ${parsedDate} is fully booked. Let me check what other times we have available.`
       };
       
       if (DEBUG_TOOLS) {
-        console.log(`🔧 Time slot not available, sending response:`, JSON.stringify(response, null, 2));
+        console.log(`🔧 Time slot fully booked, sending response:`, JSON.stringify(response, null, 2));
+      }
+      
+      return res.json(response);
+    }
+
+    if (requestedSlot.maxPartySize < partySize) {
+      // Not enough remaining capacity for this party size
+      const response = {
+        success: false,
+        message: `I'm sorry, but we only have space for ${requestedSlot.maxPartySize} people at ${time} on ${parsedDate}. Would you like to try a different time or reduce your party size?`
+      };
+      
+      if (DEBUG_TOOLS) {
+        console.log(`🔧 Insufficient capacity, sending response:`, JSON.stringify(response, null, 2));
       }
       
       return res.json(response);
