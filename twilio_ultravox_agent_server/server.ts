@@ -61,7 +61,13 @@ const validateWebhookInput = [
 
 const validateReservationInput = [
   body('customerName').isString().trim().isLength({ min: 1, max: 100 }).withMessage('Valid customer name required'),
-  body('date').isString().matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('Date must be in YYYY-MM-DD format'),
+  body('date').custom((value) => {
+    // Accept both YYYY-MM-DD format and natural language
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return true; // Let our parseNaturalDate function handle it
+    }
+    throw new Error('Date is required');
+  }),
   body('time').isString().notEmpty().withMessage('Time is required'),
   body('partySize').isInt({ min: 1, max: 12 }).withMessage('Party size must be between 1 and 12'),
   body('specialRequirements').optional().isString().isLength({ max: 500 })
@@ -345,9 +351,11 @@ function generatePhoneticBookingId(): string {
   return code;
 }
 
-// Convert booking ID to phonetic alphabet for voice
+// Convert booking ID to phonetic alphabet for voice (simplified format)
 function convertToPhonetic(bookingId: string): string {
-  return bookingId.split('').map(letter => phoneticAlphabet[letter] || letter).join(' ');
+  const letters = bookingId.split('');
+  const phoneticParts = letters.map(letter => `${letter} for ${phoneticAlphabet[letter] || letter}`);
+  return phoneticParts.join(', ');
 }
 
 // Convert phonetic alphabet back to letters
@@ -1084,8 +1092,15 @@ app.post('/tools/make-reservation', validateReservationInput, handleValidationEr
   try {
     const { customerName, date, time, partySize, specialRequirements } = req.body;
 
+    // FIXED: Parse natural date input first
+    const parsedDate = parseNaturalDate(date);
+    
+    if (DEBUG_TOOLS) {
+      console.log(`🔧 Date parsing: "${date}" -> "${parsedDate}"`);
+    }
+
     // ADDED: Validate future date
-    if (!isValidFutureDate(date)) {
+    if (!isValidFutureDate(parsedDate)) {
       const response = {
         success: false,
         message: `I'm sorry, but I can't make reservations for dates in the past. Please choose a future date for your reservation.`
@@ -1124,13 +1139,13 @@ app.post('/tools/make-reservation', validateReservationInput, handleValidationEr
       return res.json(response);
     }
 
-    const availableSlots = generateAvailableSlots(date);
+    const availableSlots = generateAvailableSlots(parsedDate);
     const requestedSlot = availableSlots.find(slot => slot.time === time);
 
     if (!requestedSlot || !requestedSlot.available || requestedSlot.maxPartySize < partySize) {
       const response = {
         success: false,
-        message: `I'm sorry, but that time slot is no longer available. Let me check what other times we have available for ${date}.`
+        message: `I'm sorry, but that time slot is no longer available. Let me check what other times we have available for ${parsedDate}.`
       };
       
       if (DEBUG_TOOLS) {
@@ -1144,7 +1159,7 @@ app.post('/tools/make-reservation', validateReservationInput, handleValidationEr
     const booking: Booking = {
       id: generatePhoneticBookingId(),
       customerName: customerName.trim(),
-      date,
+      date: parsedDate, // FIXED: Use parsed date
       time,
       partySize,
       specialRequirements: specialRequirements?.trim(),
@@ -1161,9 +1176,9 @@ app.post('/tools/make-reservation', validateReservationInput, handleValidationEr
       console.log(`📝 All bookings:`, bookings.map(b => ({ id: b.id, name: b.customerName, date: b.date, time: b.time })));
     }
 
-    // CHANGED: Include phonetic confirmation
+    // CHANGED: Include phonetic confirmation (simplified format)
     const phoneticCode = convertToPhonetic(booking.id);
-    const confirmationMessage = `Perfect! I've confirmed your reservation for ${customerName}, party of ${partySize}, on ${date} at ${time}. Your confirmation code is ${phoneticCode}.${specialRequirements ? ` We've noted your special requirements: ${specialRequirements}.` : ''} We look forward to seeing you at Bella Vista Italian Restaurant!`;
+    const confirmationMessage = `Perfect! I've confirmed your reservation for ${customerName}, party of ${partySize}, on ${booking.date} at ${time}. Your three-letter confirmation code is ${booking.id}, that is ${phoneticCode}.${specialRequirements ? ` We've noted your special requirements: ${specialRequirements}.` : ''} We look forward to seeing you at Bella Vista Italian Restaurant!`;
 
     console.log(`✅ Reservation created successfully: ${booking.id} (${phoneticCode})`);
     
@@ -1225,9 +1240,10 @@ app.post('/tools/check-booking', [
     
     if (!booking) {
       console.log(`❌ Booking not found for code: ${normalizedCode}`);
+      const phoneticDisplay = convertToPhonetic(normalizedCode);
       const response = {
         success: false,
-        message: `I'm sorry, but I couldn't find a reservation with confirmation code ${convertToPhonetic(normalizedCode)}. Please double-check the code or contact us if you need assistance.`
+        message: `I'm sorry, but I couldn't find a reservation with confirmation code ${normalizedCode}, that is ${phoneticDisplay}. Please double-check the code or contact us if you need assistance.`
       };
       
       if (DEBUG_TOOLS) {
@@ -1242,7 +1258,7 @@ app.post('/tools/check-booking', [
     const phoneticCode = convertToPhonetic(booking.id);
     const response = {
       success: true,
-      message: `I found your reservation! Confirmation code ${phoneticCode} for ${booking.customerName}, party of ${booking.partySize}, on ${booking.date} at ${booking.time}.${booking.specialRequirements ? ` Special requirements: ${booking.specialRequirements}.` : ''} Is there anything you'd like to change about this reservation?`,
+      message: `I found your reservation! Confirmation code ${booking.id}, that is ${phoneticCode}, for ${booking.customerName}, party of ${booking.partySize}, on ${booking.date} at ${booking.time}.${booking.specialRequirements ? ` Special requirements: ${booking.specialRequirements}.` : ''} Is there anything you'd like to change about this reservation?`,
       booking: {
         confirmationNumber: booking.id,
         phoneticCode: phoneticCode,
