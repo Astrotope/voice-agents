@@ -8,6 +8,7 @@ import { EventEmitter } from 'events';
 import os from 'os';
 import process from 'process';
 import { body, validationResult } from 'express-validator';
+import * as chrono from 'chrono-node';
 
 config();
 
@@ -384,45 +385,19 @@ function convertPhoneticToLetters(phoneticInput: string): string {
 }
 
 // Date validation and conversion utilities
-function parseNaturalDate(dateInput: string): string {
-  const today = new Date();
-  const normalizedInput = dateInput.toLowerCase().trim();
-  
-  if (normalizedInput === 'today') {
-    return today.toISOString().split('T')[0];
-  }
-  
-  if (normalizedInput === 'tomorrow') {
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
-  }
-  
-  // Handle day names (monday, tuesday, etc.)
-  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  const dayIndex = dayNames.indexOf(normalizedInput);
-  
-  if (dayIndex !== -1) {
-    const targetDate = new Date(today);
-    const currentDay = today.getDay();
-    let daysToAdd = dayIndex - currentDay;
+function parseNaturalDate(input: string, currentDate: Date = new Date('2025-06-24')): string {
+    // chrono-node handles complex cases like:
+    // "next Wednesday", "in 3 days", "June 30th", "two weeks from Friday"
+    const parsed = chrono.parseDate(input, currentDate);
     
-    // If the target day is today or in the past this week, move to next week
-    if (daysToAdd <= 0) {
-      daysToAdd += 7;
+    if (parsed && parsed > currentDate) {
+        return parsed.toISOString().split('T')[0];
     }
     
-    targetDate.setDate(today.getDate() + daysToAdd);
-    return targetDate.toISOString().split('T')[0];
-  }
-  
-  // If already in YYYY-MM-DD format, return as is
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
-    return dateInput;
-  }
-  
-  // Default to today if can't parse
-  return today.toISOString().split('T')[0];
+    // Fallback for same-day bookings (push to tomorrow)
+    const tomorrow = new Date(currentDate);
+    tomorrow.setDate(currentDate.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
 }
 
 function isValidFutureDate(dateString: string): boolean {
