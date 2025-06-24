@@ -157,6 +157,7 @@ interface ServerMetrics {
     dailySpecials: number;
     openingHours: number;
     transferCall: number;
+    checkBooking: number; // ADDED: New tool counter
   };
 }
 
@@ -293,7 +294,8 @@ let serverMetrics: ServerMetrics = {
     makeReservation: 0,
     dailySpecials: 0,
     openingHours: 0,
-    transferCall: 0
+    transferCall: 0,
+    checkBooking: 0 // ADDED: Initialize new counter
   }
 };
 
@@ -315,18 +317,95 @@ callManager.on('callError', (callId: string, error: string) => {
 // Mock data storage with enhanced debugging
 const bookings: Booking[] = [];
 
-// Sequential booking counter
-let bookingCounter = 1;
+// BOOKING SYSTEM IMPROVEMENTS START HERE 🎯
 
-// Function to generate voice-friendly IDs
-function generateSequentialId(): string {
-  return `BV${bookingCounter.toString().padStart(3, '0')}`;
+// Phonetic alphabet mapping for voice-friendly booking IDs
+const phoneticAlphabet: { [key: string]: string } = {
+  'A': 'Alpha', 'B': 'Bravo', 'C': 'Charlie', 'D': 'Delta', 'E': 'Echo',
+  'F': 'Foxtrot', 'G': 'Golf', 'H': 'Hotel', 'I': 'India', 'J': 'Juliet',
+  'K': 'Kilo', 'L': 'Lima', 'M': 'Mike', 'N': 'November', 'O': 'Oscar',
+  'P': 'Papa', 'Q': 'Quebec', 'R': 'Romeo', 'S': 'Sierra', 'T': 'Tango',
+  'U': 'Uniform', 'V': 'Victor', 'W': 'Whiskey', 'X': 'X-ray', 'Y': 'Yankee', 'Z': 'Zulu'
+};
+
+// Generate three-letter phonetic booking ID
+function generatePhoneticBookingId(): string {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const letter1 = letters[Math.floor(Math.random() * letters.length)];
+  const letter2 = letters[Math.floor(Math.random() * letters.length)];
+  const letter3 = letters[Math.floor(Math.random() * letters.length)];
+  
+  const code = `${letter1}${letter2}${letter3}`;
+  
+  if (DEBUG_BOOKINGS) {
+    const phonetic = `${phoneticAlphabet[letter1]} ${phoneticAlphabet[letter2]} ${phoneticAlphabet[letter3]}`;
+    console.log(`🎯 Generated booking ID: ${code} (${phonetic})`);
+  }
+  
+  return code;
 }
+
+// Convert booking ID to phonetic alphabet for voice
+function convertToPhonetic(bookingId: string): string {
+  return bookingId.split('').map(letter => phoneticAlphabet[letter] || letter).join(' ');
+}
+
+// Date validation and conversion utilities
+function parseNaturalDate(dateInput: string): string {
+  const today = new Date();
+  const normalizedInput = dateInput.toLowerCase().trim();
+  
+  if (normalizedInput === 'today') {
+    return today.toISOString().split('T')[0];
+  }
+  
+  if (normalizedInput === 'tomorrow') {
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+  }
+  
+  // Handle day names (monday, tuesday, etc.)
+  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const dayIndex = dayNames.indexOf(normalizedInput);
+  
+  if (dayIndex !== -1) {
+    const targetDate = new Date(today);
+    const currentDay = today.getDay();
+    let daysToAdd = dayIndex - currentDay;
+    
+    // If the target day is today or in the past this week, move to next week
+    if (daysToAdd <= 0) {
+      daysToAdd += 7;
+    }
+    
+    targetDate.setDate(today.getDate() + daysToAdd);
+    return targetDate.toISOString().split('T')[0];
+  }
+  
+  // If already in YYYY-MM-DD format, return as is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+    return dateInput;
+  }
+  
+  // Default to today if can't parse
+  return today.toISOString().split('T')[0];
+}
+
+function isValidFutureDate(dateString: string): boolean {
+  const inputDate = new Date(dateString);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Reset time to start of day
+  
+  return inputDate >= today;
+}
+
+// BOOKING SYSTEM IMPROVEMENTS END HERE 🎯
 
 // Add a debug test booking to verify the array works
 if (DEBUG_BOOKINGS) {
   const testBooking: Booking = {
-    id: 'TEST001',
+    id: 'ABC', // CHANGED: Use phonetic format
     customerName: 'Test Customer',
     date: '2025-06-25',
     time: '7:00 PM',
@@ -335,7 +414,7 @@ if (DEBUG_BOOKINGS) {
     createdAt: new Date()
   };
   bookings.push(testBooking);
-  console.log(`🧪 Added test booking to verify array: ${testBooking.id}`);
+  console.log(`🧪 Added test booking to verify array: ${testBooking.id} (${convertToPhonetic(testBooking.id)})`); // CHANGED: Show phonetic
   console.log(`🧪 Current bookings array length: ${bookings.length}`);
 }
 
@@ -534,7 +613,7 @@ async function transferActiveCall(ultravoxCallId: string) {
   }
 }
 
-// Tool definitions (unchanged from original)
+// Tool definitions - ADDED checkBooking tool
 const toolsBaseUrl = process.env.BASE_URL || 'http://localhost:3000';
 
 const tools = [
@@ -624,6 +703,27 @@ const tools = [
     ],
     http: {
       baseUrlPattern: `${toolsBaseUrl}/tools/make-reservation`,
+      httpMethod: "POST"
+    }
+  },
+  // ADDED: New checkBooking tool
+  {
+    modelToolName: "checkBooking",
+    description: "Look up an existing reservation by confirmation code",
+    defaultReaction: "AGENT_REACTION_SPEAKS",
+    dynamicParameters: [
+      {
+        name: "confirmationCode",
+        location: "PARAMETER_LOCATION_BODY",
+        schema: {
+          type: "string",
+          description: "Three-letter confirmation code (e.g., ABC, XYZ)"
+        },
+        required: true
+      }
+    ],
+    http: {
+      baseUrlPattern: `${toolsBaseUrl}/tools/check-booking`,
       httpMethod: "POST"
     }
   },
@@ -736,6 +836,7 @@ CRITICAL: ALWAYS RESPOND AFTER USING TOOLS
 - After making a reservation, IMMEDIATELY confirm the details
 - After looking up specials or hours, IMMEDIATELY share the information
 - After using queryCorpus for menu questions, IMMEDIATELY share what you discovered
+- After checking a booking, IMMEDIATELY tell them what you found
 - Never wait for the customer to ask what happened - always speak first after tool use
 
 CONVERSATION FLOW:
@@ -753,9 +854,15 @@ CONVERSATION FLOW:
 TOOL USAGE RESPONSES:
 - checkAvailability: Always immediately tell them what times are available or suggest alternatives
 - makeReservation: Always immediately confirm the booking with confirmation number
+- checkBooking: Always immediately tell them the booking details or if not found
 - getDailySpecials: Always immediately tell them the specials
 - checkOpeningHours: Always immediately tell them if you're open and what the hours are
 - queryCorpus: Always immediately share the menu/policy information you found
+
+BOOKING CONFIRMATION CODES:
+- All confirmation codes are three letters (e.g., ABC, XYZ)
+- When giving confirmation codes, spell them out phonetically: "Alpha Bravo Charlie" for ABC
+- When customers provide codes, accept either format: "ABC" or "Alpha Bravo Charlie"
 
 HUMAN TRANSFER:
 If customers request to speak with a human or if you encounter complex requests:
@@ -768,6 +875,7 @@ TOOLS AVAILABLE:
 - checkOpeningHours: Check if we're currently open and get hours
 - checkAvailability: Check reservation times for specific dates
 - makeReservation: Create confirmed reservations
+- checkBooking: Look up existing reservations by confirmation code
 - getDailySpecials: Get soup and meal of the day
 - queryCorpus: Answer menu questions and dietary information
 - transferCall: Connect to human booking agent (uses automatic callId)
@@ -864,15 +972,27 @@ app.post('/tools/check-availability', [
   try {
     const { date, partySize = 1 } = req.body;
 
-    let searchDate = date;
-    const today = new Date();
+    // CHANGED: Use enhanced date parsing
+    const searchDate = parseNaturalDate(date);
+    
+    if (DEBUG_TOOLS) {
+      console.log(`🔧 Date parsing: "${date}" -> "${searchDate}"`);
+    }
 
-    if (date.toLowerCase() === 'today') {
-      searchDate = today.toISOString().split('T')[0];
-    } else if (date.toLowerCase() === 'tomorrow') {
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      searchDate = tomorrow.toISOString().split('T')[0];
+    // ADDED: Validate that the date is in the future
+    if (!isValidFutureDate(searchDate)) {
+      console.log(`❌ Invalid date: ${searchDate} is in the past`);
+      const response = {
+        success: false,
+        message: `I'm sorry, but I can't check availability for dates in the past. Please choose a future date for your reservation.`,
+        availableSlots: []
+      };
+      
+      if (DEBUG_TOOLS) {
+        console.log(`🔧 Sending response:`, JSON.stringify(response, null, 2));
+      }
+      
+      return res.json(response);
     }
 
     const availableSlots = generateAvailableSlots(searchDate)
@@ -933,6 +1053,20 @@ app.post('/tools/make-reservation', validateReservationInput, handleValidationEr
   try {
     const { customerName, date, time, partySize, specialRequirements } = req.body;
 
+    // ADDED: Validate future date
+    if (!isValidFutureDate(date)) {
+      const response = {
+        success: false,
+        message: `I'm sorry, but I can't make reservations for dates in the past. Please choose a future date for your reservation.`
+      };
+      
+      if (DEBUG_TOOLS) {
+        console.log(`🔧 Past date rejected, sending response:`, JSON.stringify(response, null, 2));
+      }
+      
+      return res.json(response);
+    }
+
     if (partySize > 12) {
       const response = {
         success: false,
@@ -975,9 +1109,9 @@ app.post('/tools/make-reservation', validateReservationInput, handleValidationEr
       return res.json(response);
     }
 
-    // CREATE THE BOOKING
+    // CHANGED: Use phonetic booking ID instead of sequential
     const booking: Booking = {
-      id: generateSequentialId(),
+      id: generatePhoneticBookingId(),
       customerName: customerName.trim(),
       date,
       time,
@@ -996,15 +1130,18 @@ app.post('/tools/make-reservation', validateReservationInput, handleValidationEr
       console.log(`📝 All bookings:`, bookings.map(b => ({ id: b.id, name: b.customerName, date: b.date, time: b.time })));
     }
 
-    const confirmationMessage = `Perfect! I've confirmed your reservation for ${customerName}, party of ${partySize}, on ${date} at ${time}. Your confirmation number is ${booking.id}.${specialRequirements ? ` We've noted your special requirements: ${specialRequirements}.` : ''} We look forward to seeing you at Bella Vista Italian Restaurant!`;
+    // CHANGED: Include phonetic confirmation
+    const phoneticCode = convertToPhonetic(booking.id);
+    const confirmationMessage = `Perfect! I've confirmed your reservation for ${customerName}, party of ${partySize}, on ${date} at ${time}. Your confirmation code is ${phoneticCode}.${specialRequirements ? ` We've noted your special requirements: ${specialRequirements}.` : ''} We look forward to seeing you at Bella Vista Italian Restaurant!`;
 
-    console.log(`✅ Reservation created successfully: ${booking.id}`);
+    console.log(`✅ Reservation created successfully: ${booking.id} (${phoneticCode})`);
     
     const response = {
       success: true,
       message: confirmationMessage,
       booking: {
         confirmationNumber: booking.id,
+        phoneticCode: phoneticCode, // ADDED: Include phonetic version
         customerName: booking.customerName,
         date: booking.date,
         time: booking.time,
@@ -1022,6 +1159,80 @@ app.post('/tools/make-reservation', validateReservationInput, handleValidationEr
     console.error('❌ Error making reservation:', error);
     return res.status(500).json({
       error: "I apologize, but I'm having trouble processing your reservation right now. Please try again in a moment."
+    });
+  }
+});
+
+// ADDED: New check booking endpoint
+app.post('/tools/check-booking', [
+  body('confirmationCode').isString().trim().isLength({ min: 1, max: 10 })
+], handleValidationErrors, (req, res) => {
+  // Set header FIRST
+  res.setHeader('X-Ultravox-Agent-Reaction', 'speaks');
+  
+  // Track tool usage
+  serverMetrics.toolCalls.checkBooking++;
+  
+  if (DEBUG_TOOLS) {
+    console.log(`🔧 [${new Date().toISOString()}] checkBooking called`);
+    console.log(`🔧 Request data:`, JSON.stringify(req.body, null, 2));
+  }
+  
+  try {
+    const { confirmationCode } = req.body;
+    
+    // Normalize the confirmation code (uppercase, remove spaces)
+    const normalizedCode = confirmationCode.toUpperCase().replace(/\s+/g, '');
+    
+    if (DEBUG_TOOLS) {
+      console.log(`🔧 Looking for booking with code: ${normalizedCode}`);
+      console.log(`🔧 Available bookings:`, bookings.map(b => b.id));
+    }
+    
+    // Find the booking
+    const booking = bookings.find(b => b.id === normalizedCode);
+    
+    if (!booking) {
+      console.log(`❌ Booking not found for code: ${normalizedCode}`);
+      const response = {
+        success: false,
+        message: `I'm sorry, but I couldn't find a reservation with confirmation code ${convertToPhonetic(normalizedCode)}. Please double-check the code or contact us if you need assistance.`
+      };
+      
+      if (DEBUG_TOOLS) {
+        console.log(`🔧 Sending response:`, JSON.stringify(response, null, 2));
+      }
+      
+      return res.json(response);
+    }
+    
+    console.log(`✅ Found booking: ${booking.id} for ${booking.customerName}`);
+    
+    const phoneticCode = convertToPhonetic(booking.id);
+    const response = {
+      success: true,
+      message: `I found your reservation! Confirmation code ${phoneticCode} for ${booking.customerName}, party of ${booking.partySize}, on ${booking.date} at ${booking.time}.${booking.specialRequirements ? ` Special requirements: ${booking.specialRequirements}.` : ''} Is there anything you'd like to change about this reservation?`,
+      booking: {
+        confirmationNumber: booking.id,
+        phoneticCode: phoneticCode,
+        customerName: booking.customerName,
+        date: booking.date,
+        time: booking.time,
+        partySize: booking.partySize,
+        specialRequirements: booking.specialRequirements,
+        createdAt: booking.createdAt
+      }
+    };
+    
+    if (DEBUG_TOOLS) {
+      console.log(`🔧 Sending response:`, JSON.stringify(response, null, 2));
+    }
+    
+    return res.json(response);
+  } catch (error) {
+    console.error('❌ Error checking booking:', error);
+    return res.status(500).json({
+      error: "I'm sorry, I'm having trouble looking up that reservation right now. Please try again."
     });
   }
 });
@@ -1135,7 +1346,7 @@ app.post('/debug/create-booking', authenticateAdmin, (req, res) => {
     console.log(`🧪 Debug endpoint called to create test booking`);
     
     const testBooking: Booking = {
-      id: `DEBUG${Date.now()}`,
+      id: generatePhoneticBookingId(), // CHANGED: Use phonetic ID
       customerName: 'Debug Test Customer',
       date: '2025-06-26',
       time: '8:00 PM',
@@ -1146,12 +1357,14 @@ app.post('/debug/create-booking', authenticateAdmin, (req, res) => {
     
     bookings.push(testBooking);
     
-    console.log(`🧪 Debug booking created: ${testBooking.id}`);
+    const phoneticCode = convertToPhonetic(testBooking.id); // ADDED: Show phonetic
+    console.log(`🧪 Debug booking created: ${testBooking.id} (${phoneticCode})`);
     console.log(`🧪 Bookings array length: ${bookings.length}`);
     
     return res.json({
       success: true,
       booking: testBooking,
+      phoneticCode: phoneticCode, // ADDED: Include phonetic
       totalBookings: bookings.length,
       allBookings: bookings
     });
@@ -1232,13 +1445,25 @@ app.post('/webhook/twilio-errors', (req, res) => {
 app.get('/bookings', authenticateAdmin, (req, res) => {
   if (DEBUG_BOOKINGS) {
     console.log(`📊 Bookings endpoint called - returning ${bookings.length} bookings`);
-    console.log(`📊 All bookings:`, bookings.map(b => ({ id: b.id, name: b.customerName, date: b.date, time: b.time })));
+    console.log(`📊 All bookings:`, bookings.map(b => ({ 
+      id: b.id, 
+      phonetic: convertToPhonetic(b.id), // ADDED: Show phonetic in logs
+      name: b.customerName, 
+      date: b.date, 
+      time: b.time 
+    })));
   }
   
   return res.json({ 
-    bookings,
+    bookings: bookings.map(b => ({
+      ...b,
+      phoneticCode: convertToPhonetic(b.id) // ADDED: Include phonetic in response
+    })),
     total: bookings.length,
-    recent: bookings.slice(-10), // Last 10 bookings
+    recent: bookings.slice(-10).map(b => ({
+      ...b,
+      phoneticCode: convertToPhonetic(b.id) // ADDED: Include phonetic for recent too
+    })), // Last 10 bookings
     debug: {
       arrayLength: bookings.length,
       debugMode: DEBUG_BOOKINGS
@@ -1280,7 +1505,11 @@ app.get('/health', (req, res) => {
     utilizationPercent: Math.round((callManager.getActiveCallCount() / MAX_CONCURRENT_CALLS) * 100),
     bookings: {
       total: bookings.length,
-      recent: bookings.slice(-3).map(b => ({ id: b.id, name: b.customerName }))
+      recent: bookings.slice(-3).map(b => ({ 
+        id: b.id, 
+        phonetic: convertToPhonetic(b.id), // ADDED: Show phonetic in health
+        name: b.customerName 
+      }))
     }
   };
   
@@ -1344,6 +1573,7 @@ app.listen(port, () => {
   console.log(`📈 Metrics: http://localhost:${port}/metrics (requires API key)`);
   console.log(`⚙️  Configuration: http://localhost:${port}/config (requires API key)`);
   console.log(`📝 Bookings: http://localhost:${port}/bookings (requires API key)`);
+  console.log(`🔍 Check booking: POST http://localhost:${port}/tools/check-booking`); // ADDED: New endpoint
   console.log(`🧪 Debug booking: POST http://localhost:${port}/debug/create-booking (requires API key)`);
   console.log(`👤 Agent: ${AGENT_NAME}`);
   console.log(`🗣️ Ultravox Voice: ${ULTRAVOX_VOICE}`);
@@ -1352,6 +1582,7 @@ app.listen(port, () => {
   console.log(`🔐 Admin endpoints require X-API-Key header`);
   console.log(`🧪 Debug mode - Bookings: ${DEBUG_BOOKINGS}, Tools: ${DEBUG_TOOLS}, Requests: ${DEBUG_REQUESTS}`);
   console.log(`📊 Initial bookings array length: ${bookings.length}`);
+  console.log(`🎯 Phonetic booking codes enabled - example: ABC = Alpha Bravo Charlie`); // ADDED: Show new feature
 
   if (!process.env.ULTRAVOX_API_KEY) {
     console.warn('⚠️  ULTRAVOX_API_KEY environment variable not set!');
