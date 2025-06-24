@@ -61,13 +61,7 @@ const validateWebhookInput = [
 
 const validateReservationInput = [
   body('customerName').isString().trim().isLength({ min: 1, max: 100 }).withMessage('Valid customer name required'),
-  body('date').custom((value) => {
-    // Accept both YYYY-MM-DD format and natural language
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return true; // Let our parseNaturalDate function handle it
-    }
-    throw new Error('Date is required');
-  }),
+  body('date').isString().notEmpty().withMessage('Date is required'),
   body('time').isString().notEmpty().withMessage('Time is required'),
   body('partySize').isInt({ min: 1, max: 12 }).withMessage('Party size must be between 1 and 12'),
   body('specialRequirements').optional().isString().isLength({ max: 500 })
